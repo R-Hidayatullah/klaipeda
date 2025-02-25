@@ -1,0 +1,9 @@
+{
+    "makefile.launchConfigurations": [
+        {
+            "cwd": "/home/ridwan/Documents/klaipeda/bin",
+            "binaryPath": "/home/ridwan/Documents/klaipeda/bin/app",
+            "binaryArgs": []
+        }
+    ]
+}

@@ -403,5 +403,7 @@ FodyWeavers.xsd
 /out/
 /build/
 /vcpkg_installed/
+/bin/
+/obj/
 *.exe
 *.ipf
