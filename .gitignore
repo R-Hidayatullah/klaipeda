@@ -401,5 +401,6 @@ FodyWeavers.xsd
 /vcpkg_installed/
 /bin/
 /obj/
+/external/
 *.exe
 *.ipf
