@@ -1,7 +1,7 @@
 #include <iostream>
 
-int main(int argc, char const *argv[])
+int main()
 {
-    /* code */
+    std::cout << "Klaipeda\n";
     return 0;
 }
