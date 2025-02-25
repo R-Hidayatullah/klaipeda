@@ -18,6 +18,7 @@ TARGET_WIN := $(BIN_DIR)/klaipeda.exe
 # Source and object files
 SOURCES := $(wildcard $(SRC_DIR)/*.cpp)
 OBJECTS := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(SOURCES))
+OBJECTS_WIN := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.win.o, $(SOURCES))
 
 # Default rule
 all: linux
@@ -37,7 +38,6 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
 
 # Debug build (Linux only)
 debug: CXXFLAGS += -g -DDEBUG -O0
-debug: LDFLAGS += 
 debug: linux
 
 # Sanitized build (Linux only, for debugging memory issues)
@@ -55,12 +55,16 @@ info:
 	@echo "Target: $(TARGET)"
 	@echo "Target Windows: $(TARGET_WIN)"
 
-# Build for Windows (cross-compile)
+# Build for Windows (cross-compile, fully static)
 windows: CXX := $(CXX_WIN)
 windows: CXXFLAGS := -std=c++11 -Wall -Iinclude -Iexternal
+windows: LDFLAGS := -static -static-libgcc -static-libstdc++ -lpthread
 windows: $(BIN_DIR) $(OBJ_DIR) $(TARGET_WIN)
 
-$(TARGET_WIN): $(OBJECTS)
+$(OBJ_DIR)/%.win.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
+	$(CXX_WIN) $(CXXFLAGS) -c $< -o $@
+
+$(TARGET_WIN): $(OBJECTS_WIN)
 	$(CXX_WIN) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
 
 # Cleanup
