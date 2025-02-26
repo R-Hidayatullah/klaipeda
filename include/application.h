@@ -221,13 +221,16 @@ void left_panel(Application &app)
 
     if (!app.ipf_root.ipf_file_table.empty())
     {
-        if (ImGui::BeginTable("file_table", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable))
+        if (ImGui::BeginTable("file_table", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp))
         {
+            // **Keep header row fixed at the top**
+            ImGui::TableSetupScrollFreeze(0, 1); // Freeze 1 row (header)
+
             ImGui::TableSetupColumn("Index", ImGuiTableColumnFlags_WidthFixed, 50.0f);
             ImGui::TableSetupColumn("Directory Name", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Compressed Size", ImGuiTableColumnFlags_WidthFixed, 100.0f);
             ImGui::TableSetupColumn("Uncompressed Size", ImGuiTableColumnFlags_WidthFixed, 120.0f);
-            ImGui::TableHeadersRow();
+            ImGui::TableHeadersRow(); // This will now stay visible at the top!
 
             ImGuiListClipper clipper;
             clipper.Begin(app.ipf_root.ipf_file_table.size());
@@ -240,7 +243,7 @@ void left_panel(Application &app)
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
 
-                    // Create a selectable row spanning all columns
+                    // Selectable row spanning all columns
                     std::string label = "##row" + std::to_string(i);
                     bool selected = (app.archive_data.selected_number == i);
 
