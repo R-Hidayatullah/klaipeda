@@ -166,7 +166,7 @@ bool parse_ipf(IPF_Root &ipf_root)
         read(file, entry.directory_name, entry.directory_name_length);
     }
 
-    std::cout << "\nFinished parsing IPF file.\n";
+    std::cout << "Finished parsing IPF file.\n";
     return true;
 }
 
