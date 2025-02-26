@@ -17,6 +17,7 @@ struct ArchiveData
     uint32_t index_number;
     uint32_t selected_number;
     uint32_t last_selected_number;
+    uint32_t last_selected_image;
     bool preview_tab_active;
     int width;
     int height;
@@ -417,35 +418,51 @@ bool check_valid_image(const uint8_t *data_ptr, size_t data_size)
            valid_tga(data_ptr, data_size) || valid_gif(data_ptr, data_size) ||
            valid_tiff(data_ptr, data_size);
 }
-
 void render_image(Application &app, const uint8_t *data_ptr, size_t data_size)
 {
+    // Check if the same file is already loaded
+    if (app.archive_data.last_selected_image == app.archive_data.last_selected_number)
+    {
+        // Just display the cached image
+        ImGui::Image((ImTextureID)app.archive_data.texture, ImVec2(app.archive_data.width, app.archive_data.height));
+        return;
+    }
 
-    // Load image from memory using stb_image
-    app.archive_data.image_data = stbi_load_from_memory(data_ptr, static_cast<int>(data_size), &app.archive_data.width, &app.archive_data.height, &app.archive_data.channels, 4);
+    if (app.archive_data.texture == 0)
+    {
+        glGenTextures(1, &app.archive_data.texture);
+    }
 
+    // Load new image
+    app.archive_data.image_data = stbi_load_from_memory(data_ptr, static_cast<int>(data_size),
+                                                        &app.archive_data.width, &app.archive_data.height,
+                                                        &app.archive_data.channels, 4);
     if (!app.archive_data.image_data)
     {
         ImGui::Text("Failed to load image.");
         return;
     }
-    ImGui::Text("Dimensions: %dx%d, Channels: %d", app.archive_data.width, app.archive_data.height, app.archive_data.channels);
 
-    // Generate OpenGL texture
-    if (app.archive_data.texture == 0)
-    {
-        glGenTextures(1, &app.archive_data.texture);
-    }
+    // Generate texture if not created
+    glGenTextures(1, &app.archive_data.texture);
     glBindTexture(GL_TEXTURE_2D, app.archive_data.texture);
 
-    // Upload texture to OpenGL
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, app.archive_data.width, app.archive_data.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, app.archive_data.image_data);
+    // Upload to OpenGL
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, app.archive_data.width, app.archive_data.height,
+                 0, GL_RGBA, GL_UNSIGNED_BYTE, app.archive_data.image_data);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    // Display image in ImGui
+    // Free image data (no longer needed after uploading to OpenGL)
+    stbi_image_free(app.archive_data.image_data);
+    app.archive_data.image_data = nullptr;
+
+    // Update last selected number to avoid reloading
+    app.archive_data.last_selected_image = app.archive_data.selected_number;
+
+    // Display image
     ImGui::Image((ImTextureID)app.archive_data.texture, ImVec2(app.archive_data.width, app.archive_data.height));
 }
 
@@ -514,13 +531,6 @@ void render_panel(Application &app)
     {
         if (app.archive_data.selected_number != app.archive_data.last_selected_number)
         {
-            // Cleanup previous image data
-            if (app.archive_data.image_data)
-            {
-                stbi_image_free(app.archive_data.image_data);
-                app.archive_data.image_data = nullptr;
-            }
-
             // Reset image properties
             app.archive_data.width = 0;
             app.archive_data.height = 0;
