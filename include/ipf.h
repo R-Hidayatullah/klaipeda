@@ -97,6 +97,7 @@ typedef struct
 {
     IPF_Footer ipf_footer;                     // Footer structure containing archive metadata
     std::vector<IPF_FileTable> ipf_file_table; // Pointer to the dynamically allocated file table
+    std::string file_path;
 } IPF_Root;
 
 #pragma pack(pop) // Restore default alignment
@@ -130,16 +131,16 @@ void read(std::ifstream &file, std::array<T, N> &data)
     file.read(reinterpret_cast<char *>(data.data()), sizeof(T) * N);
 }
 
-bool parse_ipf(const std::string &filename, IPF_Root &ipf_root)
+bool parse_ipf(IPF_Root &ipf_root)
 {
-    std::ifstream file(filename, std::ios::binary);
+    std::ifstream file(ipf_root.file_path, std::ios::binary);
     if (!file)
     {
-        std::cerr << "Failed to open file: " << filename << '\n';
+        std::cerr << "Failed to open file: " << ipf_root.file_path << '\n';
         return false;
     }
 
-    std::cout << "Opened file: " << filename << '\n';
+    std::cout << "Opened file: " << ipf_root.file_path << '\n';
 
     // Read footer from the end of the file
     file.seekg(-static_cast<int>(sizeof(IPF_Footer)), std::ios::end);
@@ -229,15 +230,15 @@ void print_hex_dump(std::vector<uint8_t> &buffer_data, size_t bytes_per_row, siz
     printf(" |\n");
 }
 
-std::vector<uint8_t> extract_data(const std::string &filename, IPF_Root &ipf_root, size_t index)
+std::vector<uint8_t> extract_data(IPF_Root &ipf_root, size_t index)
 {
     auto &entry = ipf_root.ipf_file_table[index];
     std::vector<uint8_t> compressed_data(entry.file_size_compressed);
 
-    std::ifstream file(filename, std::ios::binary);
+    std::ifstream file(ipf_root.file_path, std::ios::binary);
     if (!file)
     {
-        std::cerr << "Failed to open file: " << filename << '\n';
+        std::cerr << "Failed to open file: " << ipf_root.file_path << '\n';
         return {};
     }
 
