@@ -17,6 +17,8 @@ struct ArchiveData
     uint32_t selected_number;
     uint32_t last_selected_number;
     uint32_t last_selected_image;
+    double extract_message_time;
+    std::string last_extracted_filename;
     bool preview_tab_active;
     int width;
     int height;
@@ -539,11 +541,45 @@ void right_panel(Application &app)
         ImGui::Text("Compressed Size: %u bytes", selected_file.file_size_compressed);
         ImGui::Text("Uncompressed Size: %u bytes", selected_file.file_size_uncompressed);
         ImGui::Text("File Offset: 0x%X", selected_file.file_pointer);
+
+        if (!app.archive_data.decompressed_data.empty())
+        {
+            ImGui::Text("Decompressed Data Size: %lu bytes", app.archive_data.decompressed_data.size());
+
+            // Generate filename: container_name_index.bin
+            std::string filename = selected_file.container_name + "_" + std::to_string(app.archive_data.selected_number) + ".bin";
+
+            // Extract button
+            if (ImGui::Button("Extract Decompressed"))
+            {
+                std::ofstream file(filename, std::ios::binary);
+                if (file)
+                {
+                    file.write(reinterpret_cast<const char *>(app.archive_data.decompressed_data.data()), app.archive_data.decompressed_data.size());
+                    file.close();
+
+                    // Store filename and timestamp for 5-second display
+                    app.archive_data.last_extracted_filename = filename;
+                    app.archive_data.extract_message_time = ImGui::GetTime();
+                }
+            }
+
+            // Show extraction message for 5 seconds
+            if (!app.archive_data.last_extracted_filename.empty() && (ImGui::GetTime() - app.archive_data.extract_message_time) < 5.0)
+            {
+                ImGui::Text("Extracted: %s", app.archive_data.last_extracted_filename.c_str());
+            }
+        }
+        else
+        {
+            ImGui::Text("Decompressed Data: Not Loaded");
+        }
     }
     else
     {
         ImGui::Text("No files loaded.");
     }
+
     ImGui::PopTextWrapPos();
     ImGui::End();
 }
