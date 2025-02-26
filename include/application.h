@@ -429,6 +429,7 @@ void render_image(Application &app, const uint8_t *data_ptr, size_t data_size)
         ImGui::Text("Failed to load image.");
         return;
     }
+    ImGui::Text("Dimensions: %dx%d, Channels: %d", app.archive_data.width, app.archive_data.height, app.archive_data.channels);
 
     // Generate OpenGL texture
     if (app.archive_data.texture == 0)
