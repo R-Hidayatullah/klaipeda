@@ -4,7 +4,7 @@ int main()
 {
     std::cout << "Hello World\n";
     Application app{};
-    app.ipf_root.file_path = "/home/ridwan/Documents/klaipeda/char_texture_low.ipf";
+    app.ipf_root.file_path = "/home/ridwan/Documents/TreeOfSaviorCN/data/ui.ipf";
     parse_ipf(app.ipf_root);
     print_debug_info(app.ipf_root);
     std::vector<uint8_t> result_data = extract_data(app.ipf_root, 0);

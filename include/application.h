@@ -343,7 +343,6 @@ void render_decompressed_tab(Application &app)
         ImGui::Text("No files loaded.");
     }
 }
-
 bool valid_png(const uint8_t *data_ptr, size_t data_size)
 {
     return (data_size >= 8 &&
@@ -374,10 +373,49 @@ bool valid_dds(const uint8_t *data_ptr, size_t data_size)
             data_ptr[2] == 'S' && data_ptr[3] == ' '); // "DDS "
 }
 
+bool valid_bmp(const uint8_t *data_ptr, size_t data_size)
+{
+    return (data_size >= 2 &&
+            data_ptr[0] == 'B' && data_ptr[1] == 'M'); // "BM"
+}
+
+bool valid_ico(const uint8_t *data_ptr, size_t data_size)
+{
+    return (data_size >= 4 &&
+            data_ptr[0] == 0x00 && data_ptr[1] == 0x00 &&
+            data_ptr[2] == 0x01 && data_ptr[3] == 0x00); // ICO header
+}
+
+bool valid_tga(const uint8_t *data_ptr, size_t data_size)
+{
+    return (data_size >= 18 &&
+            (data_ptr[1] == 0 || data_ptr[1] == 1) && // Uncompressed or RLE-compressed
+            (data_ptr[2] == 2 || data_ptr[2] == 10)); // Truecolor (2) or RLE Truecolor (10)
+}
+
+bool valid_gif(const uint8_t *data_ptr, size_t data_size)
+{
+    return (data_size >= 6 &&
+            data_ptr[0] == 'G' && data_ptr[1] == 'I' &&
+            data_ptr[2] == 'F' && data_ptr[3] == '8' &&
+            (data_ptr[4] == '7' || data_ptr[4] == '9') &&
+            data_ptr[5] == 'a'); // "GIF87a" or "GIF89a"
+}
+
+bool valid_tiff(const uint8_t *data_ptr, size_t data_size)
+{
+    return (data_size >= 4 &&
+            ((data_ptr[0] == 'I' && data_ptr[1] == 'I' && data_ptr[2] == 0x2A && data_ptr[3] == 0x00) || // Little-endian TIFF
+             (data_ptr[0] == 'M' && data_ptr[1] == 'M' && data_ptr[2] == 0x00 && data_ptr[3] == 0x2A))); // Big-endian TIFF
+}
+
 bool check_valid_image(const uint8_t *data_ptr, size_t data_size)
 {
     return valid_png(data_ptr, data_size) || valid_jpeg(data_ptr, data_size) ||
-           valid_webp(data_ptr, data_size) || valid_dds(data_ptr, data_size);
+           valid_webp(data_ptr, data_size) || valid_dds(data_ptr, data_size) ||
+           valid_bmp(data_ptr, data_size) || valid_ico(data_ptr, data_size) ||
+           valid_tga(data_ptr, data_size) || valid_gif(data_ptr, data_size) ||
+           valid_tiff(data_ptr, data_size);
 }
 
 void render_image(Application &app, const uint8_t *data_ptr, size_t data_size)
@@ -405,9 +443,6 @@ void render_image(Application &app, const uint8_t *data_ptr, size_t data_size)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    // Free stb_image memory after upload
-    stbi_image_free(app.archive_data.image_data);
 
     // Display image in ImGui
     ImGui::Image((ImTextureID)app.archive_data.texture, ImVec2(app.archive_data.width, app.archive_data.height));
