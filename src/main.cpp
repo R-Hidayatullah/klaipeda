@@ -10,9 +10,9 @@ int main()
     std::vector<uint8_t> result_data = extract_data(app.ipf_root, 0);
     print_hex_dump(result_data, 16, 4);
 
-    // if (!initialize(app))
-    //     return -1;
-    // run(app);
-    // cleanup(app);
+    if (!initialize(app))
+        return -1;
+    run(app);
+    cleanup(app);
     return 0;
 }
