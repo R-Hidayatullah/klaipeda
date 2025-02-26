@@ -230,28 +230,6 @@ void print_hex_dump(std::vector<uint8_t> &buffer_data, size_t bytes_per_row, siz
     printf(" |\n");
 }
 
-std::vector<uint8_t> extract_data(IPF_Root &ipf_root, size_t index)
-{
-    auto &entry = ipf_root.ipf_file_table[index];
-    std::vector<uint8_t> compressed_data(entry.file_size_compressed);
-
-    std::ifstream file(ipf_root.file_path, std::ios::binary);
-    if (!file)
-    {
-        std::cerr << "Failed to open file: " << ipf_root.file_path << '\n';
-        return {};
-    }
-
-    file.seekg(entry.file_pointer, std::ios::beg);
-    if (!file.read(reinterpret_cast<char *>(compressed_data.data()), entry.file_size_compressed))
-    {
-        std::cerr << "Failed to read file data\n";
-        return {};
-    }
-
-    return compressed_data;
-}
-
 /**
  * Computes the CRC32 value for a single byte.
  */
@@ -324,9 +302,6 @@ std::vector<uint8_t> decompress_data(std::vector<uint8_t> &compressed_data, size
     // Decrypt compressed data
     ipf_decrypt(compressed_data.data(), compressed_data.size());
 
-    // Debug: Print hex dump
-    print_hex_dump(compressed_data, 16, 4);
-
     // Set up zlib stream
     z_stream stream{};
     stream.next_in = compressed_data.data();
@@ -353,7 +328,31 @@ std::vector<uint8_t> decompress_data(std::vector<uint8_t> &compressed_data, size
 
     // Resize to actual decompressed size
     decompressed_data.resize(stream.total_out);
+    compressed_data.clear();
+    compressed_data.shrink_to_fit();
     return decompressed_data;
+}
+
+std::vector<uint8_t> extract_data(IPF_Root &ipf_root, size_t index)
+{
+    auto &entry = ipf_root.ipf_file_table[index];
+    std::vector<uint8_t> compressed_data(entry.file_size_compressed);
+
+    std::ifstream file(ipf_root.file_path, std::ios::binary);
+    if (!file)
+    {
+        std::cerr << "Failed to open file: " << ipf_root.file_path << '\n';
+        return {};
+    }
+
+    file.seekg(entry.file_pointer, std::ios::beg);
+    if (!file.read(reinterpret_cast<char *>(compressed_data.data()), entry.file_size_compressed))
+    {
+        std::cerr << "Failed to read file data\n";
+        return {};
+    }
+
+    return decompress_data(compressed_data, entry.file_size_uncompressed);
 }
 
 #endif // IPF_H
