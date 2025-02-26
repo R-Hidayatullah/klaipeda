@@ -3,7 +3,7 @@ CXX := g++
 CXX_WIN := x86_64-w64-mingw32-g++  # Adjust for your MinGW cross-compiler
 
 # Common compiler flags
-CXXFLAGS := -std=c++11 -Wall -Wextra -Wpedantic -Wshadow -Wconversion \
+CXXFLAGS := -std=c++11 \
             -Iinclude -Iexternal -Iexternal/imgui-docking -Iexternal/imgui-docking/backends \
             -Iexternal/glad33core/include -Iexternal/stb-master  # ✅ Added stb-master
 
@@ -40,7 +40,7 @@ $(BIN_DIR) $(OBJ_DIR):
 	mkdir -p $@
 
 # Build for Linux
-linux: LDFLAGS += -lglfw -lGL -ldl -lpthread
+linux: LDFLAGS += -lglfw -lGL -ldl -lpthread -lz -lm
 linux: $(BIN_DIR) $(OBJ_DIR) $(TARGET)
 
 $(TARGET): $(OBJECTS)
@@ -72,7 +72,7 @@ info:
 windows: CXX := $(CXX_WIN)
 windows: CXXFLAGS := -std=c++11 -Wall -Iinclude -Iexternal -Iexternal/imgui-docking \
                       -Iexternal/imgui-docking/backends -Iexternal/glad33core/include -Iexternal/stb-master
-windows: LDFLAGS := -static -static-libgcc -static-libstdc++ -lopengl32 -lgdi32 -lglfw3 -lpthread
+windows: LDFLAGS := -static -static-libgcc -static-libstdc++ -lopengl32 -lgdi32 -lglfw3 -lpthread -lz -lm
 windows: $(BIN_DIR) $(OBJ_DIR) $(TARGET_WIN)
 
 $(OBJ_DIR)/%.win.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
