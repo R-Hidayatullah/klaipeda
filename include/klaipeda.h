@@ -8,5 +8,7 @@
 #include <zlib.h>
 #include <fstream>
 #include <iomanip>
+#include <stdio.h>
+#include <ctype.h>
 
 #endif // KLAIPEDA_H
