@@ -7,13 +7,22 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 struct ArchiveData
 {
-    std::vector<uint8_t> decompress_data;
+    std::vector<uint8_t> decompressed_data;
     uint32_t temp_number;
     uint32_t index_number;
     uint32_t selected_number;
+    uint32_t last_selected_number;
+    bool preview_tab_active;
+    int width;
+    int height;
+    int channels;
+    GLuint texture;
+    unsigned char *image_data;
 };
 
 // Struct to hold application state
@@ -32,7 +41,7 @@ void cleanup(Application &app);
 void render(Application &app);
 void beginDockspace();
 void renderMenuBar();
-void renderPanels(Application &app);
+void render_panel(Application &app);
 void flat_style();
 
 // Initialize the application
@@ -75,7 +84,7 @@ bool initialize(Application &app)
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-    io.IniFilename = nullptr; // 🚫 Disable .ini file
+    // io.IniFilename = nullptr; // 🚫 Disable .ini file
 
     // Setup ImGui backend
     ImGui_ImplGlfw_InitForOpenGL(app.window, true);
@@ -115,7 +124,7 @@ void render(Application &app)
 
     beginDockspace();
     renderMenuBar(); // Add menu bar for theme selection
-    renderPanels(app);
+    render_panel(app);
 
     // Render ImGui
     ImGui::Render();
@@ -194,9 +203,13 @@ void renderMenuBar()
     }
 }
 
-// Render the UI panels
-void renderPanels(Application &app)
+void left_panel(Application &app)
 {
+    if (app.archive_data.temp_number != app.archive_data.selected_number)
+    {
+        app.archive_data.temp_number = app.archive_data.selected_number;
+    }
+
     // Archive Browser Panel
     ImGui::Begin("Archive Browser");
     ImGui::Text("Browse archive files by category.");
@@ -263,15 +276,236 @@ void renderPanels(Application &app)
 
     ImGui::EndChild();
     ImGui::End();
+}
 
-    // File Viewer Panel
-    ImGui::Begin("File Viewer");
-    ImGui::Text("View files in binary, image, or 3D format.");
+void render_decompressed_tab(Application &app)
+{
+    ImGui::Text("Decompressed Data:");
+
+    if (!app.ipf_root.ipf_file_table.empty())
+    {
+        ImGui::BeginChild("Decompressed Scroll", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar);
+
+        ImGuiListClipper clipper;
+        clipper.Begin(static_cast<int>(app.archive_data.decompressed_data.size() / 16 + 1));
+
+        while (clipper.Step())
+        {
+            for (int line = clipper.DisplayStart; line < clipper.DisplayEnd; ++line)
+            {
+                uint64_t start_idx = static_cast<uint64_t>(line) * 16;
+                std::string line_str;
+
+                // Line number
+                char line_number[16];
+                snprintf(line_number, sizeof(line_number), "%08X: ", (unsigned int)start_idx);
+                line_str += line_number;
+
+                // Hexadecimal bytes
+                for (uint64_t j = 0; j < 16; ++j)
+                {
+                    if (start_idx + j < app.archive_data.decompressed_data.size())
+                    {
+                        char hex_byte[4];
+                        snprintf(hex_byte, sizeof(hex_byte), "%02X ", app.archive_data.decompressed_data[start_idx + j]);
+                        line_str += hex_byte;
+                    }
+                    else
+                    {
+                        line_str += "   ";
+                    }
+                }
+
+                // ASCII representation
+                line_str += " ";
+                for (uint64_t j = 0; j < 16; ++j)
+                {
+                    if (start_idx + j < app.archive_data.decompressed_data.size())
+                    {
+                        char c = app.archive_data.decompressed_data[start_idx + j];
+                        line_str += (c >= 32 && c <= 126) ? c : '.';
+                    }
+                    else
+                    {
+                        line_str += " ";
+                    }
+                }
+
+                ImGui::TextUnformatted(line_str.c_str());
+            }
+        }
+
+        clipper.End();
+        ImGui::EndChild();
+    }
+    else
+    {
+        ImGui::Text("No files loaded.");
+    }
+}
+
+bool valid_png(const uint8_t *data_ptr, size_t data_size)
+{
+    return (data_size >= 8 &&
+            data_ptr[0] == 0x89 && data_ptr[1] == 0x50 &&
+            data_ptr[2] == 0x4E && data_ptr[3] == 0x47 &&
+            data_ptr[4] == 0x0D && data_ptr[5] == 0x0A &&
+            data_ptr[6] == 0x1A && data_ptr[7] == 0x0A);
+}
+
+bool valid_jpeg(const uint8_t *data_ptr, size_t data_size)
+{
+    return (data_size >= 3 &&
+            data_ptr[0] == 0xFF && data_ptr[1] == 0xD8 &&
+            data_ptr[2] == 0xFF);
+}
+
+bool valid_webp(const uint8_t *data_ptr, size_t data_size)
+{
+    return (data_size >= 12 &&
+            data_ptr[0] == 0x52 && data_ptr[1] == 0x49 &&
+            data_ptr[2] == 0x46 && data_ptr[3] == 0x46); // "RIFF"
+}
+
+bool valid_dds(const uint8_t *data_ptr, size_t data_size)
+{
+    return (data_size >= 4 &&
+            data_ptr[0] == 'D' && data_ptr[1] == 'D' &&
+            data_ptr[2] == 'S' && data_ptr[3] == ' '); // "DDS "
+}
+
+bool check_valid_image(const uint8_t *data_ptr, size_t data_size)
+{
+    return valid_png(data_ptr, data_size) || valid_jpeg(data_ptr, data_size) ||
+           valid_webp(data_ptr, data_size) || valid_dds(data_ptr, data_size);
+}
+
+void render_image(Application &app, const uint8_t *data_ptr, size_t data_size)
+{
+
+    // Load image from memory using stb_image
+    app.archive_data.image_data = stbi_load_from_memory(data_ptr, static_cast<int>(data_size), &app.archive_data.width, &app.archive_data.height, &app.archive_data.channels, 4);
+
+    if (!app.archive_data.image_data)
+    {
+        ImGui::Text("Failed to load image.");
+        return;
+    }
+
+    // Generate OpenGL texture
+    if (app.archive_data.texture == 0)
+    {
+        glGenTextures(1, &app.archive_data.texture);
+    }
+    glBindTexture(GL_TEXTURE_2D, app.archive_data.texture);
+
+    // Upload texture to OpenGL
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, app.archive_data.width, app.archive_data.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, app.archive_data.image_data);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // Free stb_image memory after upload
+    stbi_image_free(app.archive_data.image_data);
+
+    // Display image in ImGui
+    ImGui::Image((ImTextureID)app.archive_data.texture, ImVec2(app.archive_data.width, app.archive_data.height));
+}
+
+void render_preview_tab(Application &app)
+{
+    ImGui::Text("Preview Data:");
+
+    if (!app.ipf_root.ipf_file_table.empty())
+    {
+
+        // Check file header for supported formats
+        const uint8_t *data_ptr = reinterpret_cast<const uint8_t *>(app.archive_data.decompressed_data.data());
+        size_t data_size = app.archive_data.decompressed_data.size();
+        if (check_valid_image(data_ptr, data_size))
+        {
+            render_image(app, data_ptr, data_size);
+        }
+    }
+    else
+    {
+        ImGui::Text("No files loaded.");
+    }
+}
+
+void middle_panel(Application &app)
+{
+    ImGui::Begin("Extracted Data");
+
+    if (ImGui::BeginTabBar("IPF Data Tabs"))
+    {
+        app.archive_data.preview_tab_active = false; // Reset flag before checking active tab
+
+        if (ImGui::BeginTabItem("Decompressed"))
+        {
+            render_decompressed_tab(app);
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Preview"))
+        {
+            if (ImGui::IsItemFocused())
+            {
+
+                if (!app.archive_data.preview_tab_active)
+                {
+                    app.archive_data.preview_tab_active = true;
+                }
+            }
+            render_preview_tab(app);
+
+            ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
+    }
+
     ImGui::End();
+}
+
+// Render the UI panels
+void render_panel(Application &app)
+{
+
+    left_panel(app);
+    if (!app.ipf_root.ipf_file_table.empty())
+    {
+        if (app.archive_data.selected_number != app.archive_data.last_selected_number)
+        {
+            // Cleanup previous image data
+            if (app.archive_data.image_data)
+            {
+                stbi_image_free(app.archive_data.image_data);
+                app.archive_data.image_data = nullptr;
+            }
+
+            // Reset image properties
+            app.archive_data.width = 0;
+            app.archive_data.height = 0;
+            app.archive_data.channels = 0;
+
+            app.archive_data.decompressed_data = extract_data(app.ipf_root, app.archive_data.selected_number);
+            app.archive_data.last_selected_number = app.archive_data.selected_number;
+        }
+    }
+    middle_panel(app);
 
     // File Info Panel
     ImGui::Begin("File Info");
     ImGui::Text("Show selected archive data info.");
+    if (!app.ipf_root.ipf_file_table.empty())
+    {
+    }
+    else
+    {
+        ImGui::Text("No files loaded.");
+    }
     ImGui::End();
 }
 
