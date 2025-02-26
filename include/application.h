@@ -14,7 +14,6 @@ struct ArchiveData
 {
     std::vector<uint8_t> decompressed_data;
     uint32_t temp_number;
-    uint32_t index_number;
     uint32_t selected_number;
     uint32_t last_selected_number;
     uint32_t last_selected_image;
@@ -522,6 +521,33 @@ void middle_panel(Application &app)
     ImGui::End();
 }
 
+void right_panel(Application &app)
+{
+    // File Info Panel
+    ImGui::Begin("File Info");
+    ImGui::PushTextWrapPos();
+
+    ImGui::Text("Show selected archive data info.");
+
+    if (!app.ipf_root.ipf_file_table.empty() && app.archive_data.selected_number < app.ipf_root.ipf_file_table.size())
+    {
+        const auto &selected_file = app.ipf_root.ipf_file_table[app.archive_data.selected_number];
+
+        ImGui::Text("Index: %u", app.archive_data.selected_number);
+        ImGui::Text("File Name: %s", selected_file.container_name.c_str());
+        ImGui::Text("Directory: %s", selected_file.directory_name.c_str());
+        ImGui::Text("Compressed Size: %u bytes", selected_file.file_size_compressed);
+        ImGui::Text("Uncompressed Size: %u bytes", selected_file.file_size_uncompressed);
+        ImGui::Text("File Offset: 0x%X", selected_file.file_pointer);
+    }
+    else
+    {
+        ImGui::Text("No files loaded.");
+    }
+    ImGui::PopTextWrapPos();
+    ImGui::End();
+}
+
 // Render the UI panels
 void render_panel(Application &app)
 {
@@ -542,17 +568,7 @@ void render_panel(Application &app)
     }
     middle_panel(app);
 
-    // File Info Panel
-    ImGui::Begin("File Info");
-    ImGui::Text("Show selected archive data info.");
-    if (!app.ipf_root.ipf_file_table.empty())
-    {
-    }
-    else
-    {
-        ImGui::Text("No files loaded.");
-    }
-    ImGui::End();
+    right_panel(app);
 }
 
 void flat_style()
