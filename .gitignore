@@ -404,3 +404,7 @@ FodyWeavers.xsd
 /external/
 *.exe
 *.ipf
+*.bin
+*.xac
+*.xsm
+*.xpm
