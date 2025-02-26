@@ -5,7 +5,7 @@ CXX_WIN := x86_64-w64-mingw32-g++  # Adjust for your MinGW cross-compiler
 # Common compiler flags
 CXXFLAGS := -std=c++11 \
             -Iinclude -Iexternal -Iexternal/imgui-docking -Iexternal/imgui-docking/backends \
-            -Iexternal/glad33core/include -Iexternal/stb-master  # ✅ Added stb-master
+            -Iexternal/glad33core/include -Iexternal/stb-master -Iexternal/glm-1.0.1-light  # ✅ Added GLM
 
 LDFLAGS := 
 
@@ -16,6 +16,8 @@ BIN_DIR := bin
 IMGUI_DIR := external/imgui-docking
 GLAD_DIR := external/glad33core
 STB_DIR := external/stb-master
+GLM_DIR := external/glm-1.0.1-light  # ✅ Added GLM
+GLFW_WIN_DIR := external/glfw-3.4.bin.WIN64  # ✅ GLFW for Windows
 
 # Output binaries
 TARGET := $(BIN_DIR)/klaipeda
@@ -40,6 +42,7 @@ $(BIN_DIR) $(OBJ_DIR):
 	mkdir -p $@
 
 # Build for Linux
+linux: CXXFLAGS += -I/usr/include/glm
 linux: LDFLAGS += -lglfw -lGL -ldl -lpthread -lz -lm
 linux: $(BIN_DIR) $(OBJ_DIR) $(TARGET)
 
@@ -71,8 +74,12 @@ info:
 # Build for Windows (cross-compile, fully static)
 windows: CXX := $(CXX_WIN)
 windows: CXXFLAGS := -std=c++11 -Wall -Iinclude -Iexternal -Iexternal/imgui-docking \
-                      -Iexternal/imgui-docking/backends -Iexternal/glad33core/include -Iexternal/stb-master
-windows: LDFLAGS := -static -static-libgcc -static-libstdc++ -lopengl32 -lgdi32 -lglfw3 -lpthread -lz -lm
+                      -Iexternal/imgui-docking/backends -Iexternal/glad33core/include -Iexternal/stb-master \
+                      -I$(GLM_DIR) -I$(GLFW_WIN_DIR)/include  # ✅ Include GLFW WIN
+
+windows: LDFLAGS := -static -static-libgcc -static-libstdc++ -lopengl32 -lgdi32 -lpthread -lz -lm \
+                    -L$(GLFW_WIN_DIR)/lib-mingw-w64 -lglfw3  # ✅ Link GLFW for Windows
+
 windows: $(BIN_DIR) $(OBJ_DIR) $(TARGET_WIN)
 
 $(OBJ_DIR)/%.win.o: $(SRC_DIR)/%.cpp | $(OBJ_DIR)
