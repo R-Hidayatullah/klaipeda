@@ -10,6 +10,13 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+// Recursive structure for nested directories
+struct DirectoryNode
+{
+    std::map<std::string, DirectoryNode> subdirectories;
+    std::vector<int> files;
+};
+
 struct ArchiveData
 {
     std::vector<uint8_t> decompressed_data;
@@ -25,6 +32,7 @@ struct ArchiveData
     int channels;
     GLuint texture;
     unsigned char *image_data;
+    DirectoryNode directory_node;
 };
 
 // Struct to hold application state
@@ -206,6 +214,53 @@ void renderMenuBar()
     }
 }
 
+void insert_into_tree(DirectoryNode &root, const std::string &path, int file_index)
+{
+    size_t last_slash = path.find_last_of('/');
+
+    std::string directory = (last_slash == std::string::npos) ? "" : path.substr(0, last_slash);
+    std::string filename = path.substr(last_slash + 1);
+
+    DirectoryNode *current = &root;
+
+    // Navigate into the correct subdirectory
+    std::stringstream ss(directory);
+    std::string segment;
+    while (std::getline(ss, segment, '/'))
+    {
+        current = &current->subdirectories[segment]; // Navigate into subdirectory
+    }
+
+    // Add only the filename to the last folder, not as another subdirectory
+    current->files.push_back(file_index);
+}
+void display_directory_tree(DirectoryNode &node, const std::string &folder_name, Application &app)
+{
+    if (ImGui::TreeNode(folder_name.c_str())) // Folder as TreeNode
+    {
+        // Show files in this folder
+        for (int file_index : node.files)
+        {
+            const auto &entry = app.ipf_root.ipf_file_table[file_index];
+            std::string filename = entry.directory_name.substr(entry.directory_name.find_last_of('/') + 1);
+
+            bool selected = (app.archive_data.selected_number == file_index);
+            if (ImGui::Selectable(filename.c_str(), selected))
+            {
+                app.archive_data.selected_number = file_index;
+            }
+        }
+
+        // Recursively display subdirectories
+        for (auto it = node.subdirectories.begin(); it != node.subdirectories.end(); ++it)
+        {
+            display_directory_tree(it->second, it->first, app);
+        }
+
+        ImGui::TreePop();
+    }
+}
+
 void left_panel(Application &app)
 {
     if (app.archive_data.temp_number != app.archive_data.selected_number)
@@ -213,71 +268,28 @@ void left_panel(Application &app)
         app.archive_data.temp_number = app.archive_data.selected_number;
     }
 
-    // Archive Browser Panel
     ImGui::Begin("Archive Browser");
     ImGui::Text("Browse archive files by category.");
     ImGui::Separator();
-    ImVec2 child_size = ImVec2(0, 0); // Adjust height as needed
-    ImGui::BeginChild("IPFDataList", child_size, true, ImGuiWindowFlags_HorizontalScrollbar);
 
-    if (!app.ipf_root.ipf_file_table.empty())
+    // **Only populate the directory tree once**
+    if (app.archive_data.directory_node.subdirectories.empty())
     {
-        if (ImGui::BeginTable("file_table", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp))
+        for (size_t i = 0; i < app.ipf_root.ipf_file_table.size(); ++i)
         {
-            // **Keep header row fixed at the top**
-            ImGui::TableSetupScrollFreeze(0, 1); // Freeze 1 row (header)
-
-            ImGui::TableSetupColumn("Index", ImGuiTableColumnFlags_WidthFixed, 50.0f);
-            ImGui::TableSetupColumn("Directory Name", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("Compressed Size", ImGuiTableColumnFlags_WidthFixed, 100.0f);
-            ImGui::TableSetupColumn("Uncompressed Size", ImGuiTableColumnFlags_WidthFixed, 120.0f);
-            ImGui::TableHeadersRow(); // This will now stay visible at the top!
-
-            ImGuiListClipper clipper;
-            clipper.Begin(app.ipf_root.ipf_file_table.size());
-            while (clipper.Step())
-            {
-                for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; ++i)
-                {
-                    const auto &entry = app.ipf_root.ipf_file_table[i];
-
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-
-                    // Selectable row spanning all columns
-                    std::string label = "##row" + std::to_string(i);
-                    bool selected = (app.archive_data.selected_number == i);
-
-                    if (ImGui::Selectable(label.c_str(), selected, ImGuiSelectableFlags_SpanAllColumns))
-                    {
-                        app.archive_data.selected_number = i;
-                    }
-
-                    // Populate row data
-                    ImGui::SameLine();
-                    ImGui::Text("%d", i);
-                    ImGui::TableNextColumn();
-                    ImGui::TextUnformatted(entry.directory_name.c_str());
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%u", entry.file_size_compressed);
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%u", entry.file_size_uncompressed);
-
-                    // Copy to clipboard if selected and Ctrl + C is pressed
-                    if (selected && ImGui::IsKeyPressed(ImGuiKey_C) && ImGui::GetIO().KeyCtrl)
-                    {
-                        std::string clipboard_text = entry.directory_name;
-                        ImGui::SetClipboardText(clipboard_text.c_str());
-                    }
-                }
-            }
-
-            ImGui::EndTable();
+            const auto &entry = app.ipf_root.ipf_file_table[i];
+            insert_into_tree(app.archive_data.directory_node, entry.directory_name, i);
         }
     }
-    else
+
+    // Display the directory tree
+    ImVec2 child_size = ImVec2(0, 0);
+    ImGui::BeginChild("IPFDataTree", child_size, true, ImGuiWindowFlags_HorizontalScrollbar);
+
+    for (auto it = app.archive_data.directory_node.subdirectories.begin();
+         it != app.archive_data.directory_node.subdirectories.end(); ++it)
     {
-        ImGui::Text("No files loaded.");
+        display_directory_tree(it->second, it->first, app);
     }
 
     ImGui::EndChild();
@@ -469,6 +481,7 @@ void render_image(Application &app)
     if (app.archive_data.last_selected_image == app.archive_data.last_selected_number)
     {
         // Just display the cached image
+        ImGui::Text("Image Info : %d width x %d height %d channels", app.archive_data.width, app.archive_data.height, app.archive_data.channels);
         ImGui::Image((ImTextureID)app.archive_data.texture, ImVec2(app.archive_data.width, app.archive_data.height));
         return;
     }
@@ -487,6 +500,8 @@ void render_image(Application &app)
         ImGui::Text("Failed to load image.");
         return;
     }
+
+    ImGui::Text("Image Info : %d width x %d height %d channels", app.archive_data.width, app.archive_data.height, app.archive_data.channels);
 
     // Generate texture if not created
     glGenTextures(1, &app.archive_data.texture);

@@ -10,5 +10,7 @@
 #include <iomanip>
 #include <stdio.h>
 #include <ctype.h>
+#include <map>
+#include <sstream>
 
 #endif // KLAIPEDA_H
