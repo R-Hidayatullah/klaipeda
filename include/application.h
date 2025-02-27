@@ -91,6 +91,7 @@ bool initialize(Application &app)
     // Setup ImGui backend
     ImGui_ImplGlfw_InitForOpenGL(app.window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
+    ImGui::StyleColorsLight();
 
     app.running = true;
     return true;
@@ -348,81 +349,121 @@ void render_decompressed_tab(Application &app)
         ImGui::Text("No files loaded.");
     }
 }
-bool valid_png(const uint8_t *data_ptr, size_t data_size)
+bool valid_png(Application &app)
 {
-    return (data_size >= 8 &&
-            data_ptr[0] == 0x89 && data_ptr[1] == 0x50 &&
-            data_ptr[2] == 0x4E && data_ptr[3] == 0x47 &&
-            data_ptr[4] == 0x0D && data_ptr[5] == 0x0A &&
-            data_ptr[6] == 0x1A && data_ptr[7] == 0x0A);
+    const std::string &filename = app.ipf_root.ipf_file_table[app.archive_data.selected_number].directory_name;
+
+    if (filename.find("png") != std::string::npos ||
+        filename.find("PNG") != std::string::npos)
+    {
+        return true;
+    }
+    return (app.archive_data.decompressed_data.size() >= 8 &&
+            app.archive_data.decompressed_data[0] == 0x89 && app.archive_data.decompressed_data[1] == 0x50 &&
+            app.archive_data.decompressed_data[2] == 0x4E && app.archive_data.decompressed_data[3] == 0x47 &&
+            app.archive_data.decompressed_data[4] == 0x0D && app.archive_data.decompressed_data[5] == 0x0A &&
+            app.archive_data.decompressed_data[6] == 0x1A && app.archive_data.decompressed_data[7] == 0x0A);
 }
 
-bool valid_jpeg(const uint8_t *data_ptr, size_t data_size)
+bool valid_jpeg(Application &app)
 {
-    return (data_size >= 3 &&
-            data_ptr[0] == 0xFF && data_ptr[1] == 0xD8 &&
-            data_ptr[2] == 0xFF);
+    const std::string &filename = app.ipf_root.ipf_file_table[app.archive_data.selected_number].directory_name;
+
+    if (filename.find("jpg") != std::string::npos ||
+        filename.find("jpeg") != std::string::npos ||
+        filename.find("JPG") != std::string::npos ||
+        filename.find("JPEG") != std::string::npos)
+    {
+        return true;
+    }
+
+    // Check if the file has JPEG magic bytes
+    return (app.archive_data.decompressed_data.size() >= 3 &&
+            app.archive_data.decompressed_data[0] == 0xFF &&
+            app.archive_data.decompressed_data[1] == 0xD8 &&
+            app.archive_data.decompressed_data[2] == 0xFF);
 }
 
-bool valid_webp(const uint8_t *data_ptr, size_t data_size)
+bool valid_webp(Application &app)
 {
-    return (data_size >= 12 &&
-            data_ptr[0] == 0x52 && data_ptr[1] == 0x49 &&
-            data_ptr[2] == 0x46 && data_ptr[3] == 0x46); // "RIFF"
+    return (app.archive_data.decompressed_data.size() >= 12 &&
+            app.archive_data.decompressed_data[0] == 0x52 && app.archive_data.decompressed_data[1] == 0x49 &&
+            app.archive_data.decompressed_data[2] == 0x46 && app.archive_data.decompressed_data[3] == 0x46); // "RIFF"
 }
 
-bool valid_dds(const uint8_t *data_ptr, size_t data_size)
+bool valid_dds(Application &app)
 {
-    return (data_size >= 4 &&
-            data_ptr[0] == 'D' && data_ptr[1] == 'D' &&
-            data_ptr[2] == 'S' && data_ptr[3] == ' '); // "DDS "
+    const std::string &filename = app.ipf_root.ipf_file_table[app.archive_data.selected_number].directory_name;
+
+    if (filename.find("dds") != std::string::npos ||
+        filename.find("DDS") != std::string::npos)
+    {
+        return true;
+    }
+    return (app.archive_data.decompressed_data.size() >= 4 &&
+            app.archive_data.decompressed_data[0] == 'D' && app.archive_data.decompressed_data[1] == 'D' &&
+            app.archive_data.decompressed_data[2] == 'S' && app.archive_data.decompressed_data[3] == ' '); // "DDS "
 }
 
-bool valid_bmp(const uint8_t *data_ptr, size_t data_size)
+bool valid_bmp(Application &app)
 {
-    return (data_size >= 2 &&
-            data_ptr[0] == 'B' && data_ptr[1] == 'M'); // "BM"
+    const std::string &filename = app.ipf_root.ipf_file_table[app.archive_data.selected_number].directory_name;
+
+    if (filename.find("bmp") != std::string::npos ||
+        filename.find("BMP") != std::string::npos)
+    {
+        return true;
+    }
+    return (app.archive_data.decompressed_data.size() >= 2 &&
+            app.archive_data.decompressed_data[0] == 'B' && app.archive_data.decompressed_data[1] == 'M'); // "BM"
 }
 
-bool valid_ico(const uint8_t *data_ptr, size_t data_size)
+bool valid_ico(Application &app)
 {
-    return (data_size >= 4 &&
-            data_ptr[0] == 0x00 && data_ptr[1] == 0x00 &&
-            data_ptr[2] == 0x01 && data_ptr[3] == 0x00); // ICO header
+    return (app.archive_data.decompressed_data.size() >= 4 &&
+            app.archive_data.decompressed_data[0] == 0x00 && app.archive_data.decompressed_data[1] == 0x00 &&
+            app.archive_data.decompressed_data[2] == 0x01 && app.archive_data.decompressed_data[3] == 0x00); // ICO header
 }
 
-bool valid_tga(const uint8_t *data_ptr, size_t data_size)
+bool valid_tga(Application &app)
 {
-    return (data_size >= 18 &&
-            (data_ptr[1] == 0 || data_ptr[1] == 1) && // Uncompressed or RLE-compressed
-            (data_ptr[2] == 2 || data_ptr[2] == 10)); // Truecolor (2) or RLE Truecolor (10)
+    const std::string &filename = app.ipf_root.ipf_file_table[app.archive_data.selected_number].directory_name;
+
+    if (filename.find("tga") != std::string::npos ||
+        filename.find("TGA") != std::string::npos)
+    {
+        return true;
+    }
+    return (app.archive_data.decompressed_data.size() >= 18 &&
+            (app.archive_data.decompressed_data[1] == 0 || app.archive_data.decompressed_data[1] == 1) && // Uncompressed or RLE-compressed
+            (app.archive_data.decompressed_data[2] == 2 || app.archive_data.decompressed_data[2] == 10)); // Truecolor (2) or RLE Truecolor (10)
 }
 
-bool valid_gif(const uint8_t *data_ptr, size_t data_size)
+bool valid_gif(Application &app)
 {
-    return (data_size >= 6 &&
-            data_ptr[0] == 'G' && data_ptr[1] == 'I' &&
-            data_ptr[2] == 'F' && data_ptr[3] == '8' &&
-            (data_ptr[4] == '7' || data_ptr[4] == '9') &&
-            data_ptr[5] == 'a'); // "GIF87a" or "GIF89a"
+    return (app.archive_data.decompressed_data.size() >= 6 &&
+            app.archive_data.decompressed_data[0] == 'G' && app.archive_data.decompressed_data[1] == 'I' &&
+            app.archive_data.decompressed_data[2] == 'F' && app.archive_data.decompressed_data[3] == '8' &&
+            (app.archive_data.decompressed_data[4] == '7' || app.archive_data.decompressed_data[4] == '9') &&
+            app.archive_data.decompressed_data[5] == 'a'); // "GIF87a" or "GIF89a"
 }
 
-bool valid_tiff(const uint8_t *data_ptr, size_t data_size)
+bool valid_tiff(Application &app)
 {
-    return (data_size >= 4 &&
-            ((data_ptr[0] == 'I' && data_ptr[1] == 'I' && data_ptr[2] == 0x2A && data_ptr[3] == 0x00) || // Little-endian TIFF
-             (data_ptr[0] == 'M' && data_ptr[1] == 'M' && data_ptr[2] == 0x00 && data_ptr[3] == 0x2A))); // Big-endian TIFF
+    return (app.archive_data.decompressed_data.size() >= 4 &&
+            ((app.archive_data.decompressed_data[0] == 'I' && app.archive_data.decompressed_data[1] == 'I' && app.archive_data.decompressed_data[2] == 0x2A && app.archive_data.decompressed_data[3] == 0x00) || // Little-endian TIFF
+             (app.archive_data.decompressed_data[0] == 'M' && app.archive_data.decompressed_data[1] == 'M' && app.archive_data.decompressed_data[2] == 0x00 && app.archive_data.decompressed_data[3] == 0x2A))); // Big-endian TIFF
 }
 
-bool check_valid_image(const uint8_t *data_ptr, size_t data_size)
+bool check_valid_image(Application &app)
 {
-    return valid_png(data_ptr, data_size) || valid_jpeg(data_ptr, data_size) ||
-           valid_webp(data_ptr, data_size) || valid_dds(data_ptr, data_size) ||
-           valid_bmp(data_ptr, data_size) || valid_ico(data_ptr, data_size) ||
-           valid_tga(data_ptr, data_size) || valid_gif(data_ptr, data_size) ||
-           valid_tiff(data_ptr, data_size);
+    return valid_png(app) || valid_jpeg(app) ||
+           valid_webp(app) || valid_dds(app) ||
+           valid_bmp(app) || valid_ico(app) ||
+           valid_tga(app) || valid_gif(app) ||
+           valid_tiff(app);
 }
-void render_image(Application &app, const uint8_t *data_ptr, size_t data_size)
+void render_image(Application &app)
 {
     // Check if the same file is already loaded
     if (app.archive_data.last_selected_image == app.archive_data.last_selected_number)
@@ -438,7 +479,7 @@ void render_image(Application &app, const uint8_t *data_ptr, size_t data_size)
     }
 
     // Load new image
-    app.archive_data.image_data = stbi_load_from_memory(data_ptr, static_cast<int>(data_size),
+    app.archive_data.image_data = stbi_load_from_memory(app.archive_data.decompressed_data.data(), static_cast<int>(app.archive_data.decompressed_data.size()),
                                                         &app.archive_data.width, &app.archive_data.height,
                                                         &app.archive_data.channels, 4);
     if (!app.archive_data.image_data)
@@ -477,12 +518,9 @@ void render_preview_tab(Application &app)
     if (!app.ipf_root.ipf_file_table.empty())
     {
 
-        // Check file header for supported formats
-        const uint8_t *data_ptr = reinterpret_cast<const uint8_t *>(app.archive_data.decompressed_data.data());
-        size_t data_size = app.archive_data.decompressed_data.size();
-        if (check_valid_image(data_ptr, data_size))
+        if (check_valid_image(app))
         {
-            render_image(app, data_ptr, data_size);
+            render_image(app);
         }
     }
     else
@@ -530,6 +568,9 @@ void right_panel(Application &app)
 {
     // File Info Panel
     ImGui::Begin("File Info");
+    ImVec2 child_size = ImVec2(0, 0); // Adjust height as needed
+    ImGui::BeginChild("FileInfo", child_size, true, ImGuiWindowFlags_HorizontalScrollbar);
+
     ImGui::PushTextWrapPos();
 
     ImGui::Text("Show selected archive data info.");
@@ -584,6 +625,7 @@ void right_panel(Application &app)
     }
 
     ImGui::PopTextWrapPos();
+    ImGui::EndChild();
     ImGui::End();
 }
 

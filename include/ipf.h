@@ -297,40 +297,48 @@ void ipf_decrypt(uint8_t *buffer, size_t size)
  */
 std::vector<uint8_t> decompress_data(std::vector<uint8_t> &compressed_data, size_t uncompressed_size)
 {
-    std::vector<uint8_t> decompressed_data(uncompressed_size);
 
-    // Decrypt compressed data
-    ipf_decrypt(compressed_data.data(), compressed_data.size());
-
-    // Set up zlib stream
-    z_stream stream{};
-    stream.next_in = compressed_data.data();
-    stream.avail_in = compressed_data.size();
-    stream.next_out = decompressed_data.data();
-    stream.avail_out = decompressed_data.size();
-
-    // Initialize for raw DEFLATE (no zlib/gzip headers)
-    if (inflateInit2(&stream, -MAX_WBITS) != Z_OK)
+    if (compressed_data.size() < uncompressed_size)
     {
-        std::cerr << "inflateInit2() failed" << std::endl;
-        return {};
+        // Decrypt compressed data
+        ipf_decrypt(compressed_data.data(), compressed_data.size());
+
+        std::vector<uint8_t> decompressed_data(uncompressed_size);
+
+        // Set up zlib stream
+        z_stream stream{};
+        stream.next_in = compressed_data.data();
+        stream.avail_in = compressed_data.size();
+        stream.next_out = decompressed_data.data();
+        stream.avail_out = decompressed_data.size();
+
+        // Initialize for raw DEFLATE (no zlib/gzip headers)
+        if (inflateInit2(&stream, -MAX_WBITS) != Z_OK)
+        {
+            std::cerr << "inflateInit2() failed" << std::endl;
+            return {};
+        }
+
+        // Perform decompression
+        int ret = inflate(&stream, Z_FINISH);
+        inflateEnd(&stream);
+
+        if (ret != Z_STREAM_END)
+        {
+            std::cerr << "Decompression failed: " << ret << std::endl;
+            return {};
+        }
+
+        // Resize to actual decompressed size
+        decompressed_data.resize(stream.total_out);
+        compressed_data.clear();
+        compressed_data.shrink_to_fit();
+        return decompressed_data;
     }
-
-    // Perform decompression
-    int ret = inflate(&stream, Z_FINISH);
-    inflateEnd(&stream);
-
-    if (ret != Z_STREAM_END)
+    else
     {
-        std::cerr << "Decompression failed: " << ret << std::endl;
-        return {};
+        return compressed_data;
     }
-
-    // Resize to actual decompressed size
-    decompressed_data.resize(stream.total_out);
-    compressed_data.clear();
-    compressed_data.shrink_to_fit();
-    return decompressed_data;
 }
 
 std::vector<uint8_t> extract_data(IPF_Root &ipf_root, size_t index)
