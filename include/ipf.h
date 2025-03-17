@@ -298,7 +298,7 @@ void ipf_decrypt(uint8_t *buffer, size_t size)
 std::vector<uint8_t> decompress_data(std::vector<uint8_t> &compressed_data, size_t uncompressed_size)
 {
 
-    if (compressed_data.size() < uncompressed_size)
+    if (compressed_data.size() != uncompressed_size)
     {
         // Decrypt compressed data
         ipf_decrypt(compressed_data.data(), compressed_data.size());
@@ -341,6 +341,22 @@ std::vector<uint8_t> decompress_data(std::vector<uint8_t> &compressed_data, size
     }
 }
 
+bool hasValidExtension(const std::string &name)
+{
+    if (name.size() < 4)
+        return false; // Ensure it's long enough
+
+    const std::string ext = name.substr(name.size() - 4); // Get the last 4 chars
+
+    // Convert to lowercase (C++11 ISO Strict)
+    std::string lowerExt;
+    lowerExt.reserve(4);
+    for (char ch : ext)
+        lowerExt.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+
+    return (lowerExt == ".fsb" || lowerExt == ".jpg" || lowerExt == ".mp3");
+}
+
 std::vector<uint8_t> extract_data(IPF_Root &ipf_root, size_t index)
 {
     auto &entry = ipf_root.ipf_file_table[index];
@@ -359,6 +375,10 @@ std::vector<uint8_t> extract_data(IPF_Root &ipf_root, size_t index)
         std::cerr << "Failed to read file data\n";
         return {};
     }
+    // if (hasValidExtension(entry.directory_name))
+    // {
+    //     return compressed_data;
+    // }
 
     return decompress_data(compressed_data, entry.file_size_uncompressed);
 }
