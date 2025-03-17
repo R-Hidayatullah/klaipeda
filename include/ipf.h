@@ -375,10 +375,10 @@ std::vector<uint8_t> extract_data(IPF_Root &ipf_root, size_t index)
         std::cerr << "Failed to read file data\n";
         return {};
     }
-    // if (hasValidExtension(entry.directory_name))
-    // {
-    //     return compressed_data;
-    // }
+    if (hasValidExtension(entry.directory_name))
+    {
+        return compressed_data;
+    }
 
     return decompress_data(compressed_data, entry.file_size_uncompressed);
 }
