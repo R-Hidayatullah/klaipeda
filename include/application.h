@@ -143,6 +143,7 @@ bool initialize(Application &app)
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
     // io.IniFilename = nullptr; // 🚫 Disable .ini file
     ImFont *defaultFont = io.Fonts->AddFontDefault();
+    // Download font from https://fonts.google.com/selection
     app.font = io.Fonts->AddFontFromFileTTF(
         "NotoSansKR-Regular.ttf",
         18.0f,
