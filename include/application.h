@@ -117,7 +117,7 @@ bool initialize(Application &app)
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     // Create window
-    app.window = glfwCreateWindow(1280, 720, "ImGui Docking Application", nullptr, nullptr);
+    app.window = glfwCreateWindow(1280, 720, "Klaipeda", nullptr, nullptr);
     if (!app.window)
     {
         std::cerr << "Failed to create GLFW window\n";
@@ -533,18 +533,18 @@ bool check_valid_image(Application &app)
 bool valid_text(Application &app)
 {
     const std::string &filename = app.ipf_root.ipf_file_table[app.archive_data.selected_number].directory_name;
-    return (filename.size() >= 4 &&
+    return (filename.size() >= 3 &&
             (filename.compare(filename.size() - 4, 4, ".lua") == 0 ||
-             filename.compare(filename.size() - 4, 4, ".effect") == 0 ||
+             filename.compare(filename.size() - 7, 7, ".effect") == 0 ||
              filename.compare(filename.size() - 4, 4, ".skn") == 0 ||
              filename.compare(filename.size() - 4, 4, ".xsd") == 0 ||
-             filename.compare(filename.size() - 4, 4, ".3deffect") == 0 ||
-             filename.compare(filename.size() - 4, 4, ".3dprop") == 0 ||
-             filename.compare(filename.size() - 4, 4, ".3drender") == 0 ||
-             filename.compare(filename.size() - 4, 4, ".fx") == 0 ||
+             filename.compare(filename.size() - 9, 9, ".3deffect") == 0 ||
+             filename.compare(filename.size() - 7, 7, ".3dprop") == 0 ||
+             filename.compare(filename.size() - 9, 9, ".3drender") == 0 ||
+             filename.compare(filename.size() - 3, 3, ".fx") == 0 ||
              filename.compare(filename.size() - 4, 4, ".fxh") == 0 ||
-             filename.compare(filename.size() - 4, 4, ".sprbin") == 0 ||
-             filename.compare(filename.size() - 4, 4, ".sani") == 0 ||
+             filename.compare(filename.size() - 7, 7, ".sprbin") == 0 ||
+             filename.compare(filename.size() - 5, 5, ".sani") == 0 ||
              filename.compare(filename.size() - 4, 4, ".xml") == 0));
 }
 
