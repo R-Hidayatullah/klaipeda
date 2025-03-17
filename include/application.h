@@ -7,6 +7,11 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
@@ -63,6 +68,33 @@ struct DirectoryNode
     std::vector<int> files;
 };
 
+struct ImageData
+{
+    unsigned char *image_buffer = nullptr;
+    GLuint texture_id = 0;
+    int image_width = 0;
+    int image_height = 0;
+    int image_channel = 0;
+};
+
+struct RenderData
+{
+    float rotation_x = 0.0f;
+    float rotation_y = 0.0f;
+    float zoom = 10.0f;
+    bool is_dragging = false;
+    double last_x = 0.0;
+    double last_y = 0.0;
+    GLuint VAO = 0;
+    GLuint VBO = 0;
+    GLuint EBO = 0;
+    GLuint shader_program = 0;
+    GLuint FBO = 0;
+    GLuint texture_color_buffer = 0;
+    GLuint RBO = 0;
+    bool preview_tab_active = false;
+};
+
 struct ArchiveData
 {
     std::vector<uint8_t> decompressed_data;
@@ -72,12 +104,6 @@ struct ArchiveData
     uint32_t last_selected_image;
     double extract_message_time;
     std::string last_extracted_filename;
-    bool preview_tab_active;
-    int width;
-    int height;
-    int channels;
-    GLuint texture;
-    unsigned char *image_data;
     DirectoryNode directory_node;
 };
 
@@ -88,8 +114,45 @@ struct Application
     bool running;
     IPF_Root ipf_root;
     ArchiveData archive_data;
+    ImageData image_data;
+    RenderData render_data;
     ImFont *font;
+    bool preview_tab_active = false;
 };
+
+const std::string vertexShaderSource = R"(
+    #version 330 core
+    layout (location = 0) in vec3 aPos;
+    layout (location = 1) in vec3 aColor;
+    
+    out vec3 vertexColor;
+    
+    uniform mat4 model;
+    uniform mat4 view;
+    uniform mat4 projection;
+    
+    void main()
+    {
+        vertexColor = aColor;
+        gl_Position = projection * view * model * vec4(aPos, 1.0);
+    }
+    )";
+
+const std::string fragmentShaderSource = R"(
+    #version 330 core
+    in vec3 vertexColor;
+    out vec4 FragColor;
+    
+    void main()
+    {
+        FragColor = vec4(vertexColor, 1.0);
+    }
+    )";
+
+constexpr ImVec4 CLEAR_COLOR(0.45f, 0.55f, 0.60f, 1.00f);
+// Need to make static as temporary because its
+// gonna be used with callback function from GLFW window
+static RenderData temp_render_data;
 
 // Function declarations
 bool initialize(Application &app);
@@ -100,6 +163,12 @@ void beginDockspace();
 void renderMenuBar();
 void render_panel(Application &app);
 void flat_style();
+GLuint compileShader(GLenum type, const std::string &source);
+GLuint createShaderProgram();
+void mouse_callback(GLFWwindow *window, double xpos, double ypos);
+void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
+void mouse_button_callback(GLFWwindow *window, int button, int action, int mods);
+void setupFramebuffer(int width, int height);
 
 // Initialize the application
 bool initialize(Application &app)
@@ -115,6 +184,7 @@ bool initialize(Application &app)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 
     // Create window
     app.window = glfwCreateWindow(1280, 720, "Klaipeda", nullptr, nullptr);
@@ -133,6 +203,13 @@ bool initialize(Application &app)
         std::cerr << "Failed to initialize GLAD\n";
         return false;
     }
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glfwSetCursorPosCallback(app.window, mouse_callback);
+    glfwSetScrollCallback(app.window, scroll_callback);
+    glfwSetMouseButtonCallback(app.window, mouse_button_callback);
 
     // Initialize ImGui
     IMGUI_CHECKVERSION();
@@ -165,6 +242,11 @@ void run(Application &app)
     while (!glfwWindowShouldClose(app.window) && app.running)
     {
         glfwPollEvents();
+        if (glfwGetWindowAttrib(app.window, GLFW_ICONIFIED) != 0)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            continue;
+        }
         render(app);
         glfwSwapBuffers(app.window);
     }
@@ -196,6 +278,7 @@ void render(Application &app)
     int display_w, display_h;
     glfwGetFramebufferSize(app.window, &display_w, &display_h);
     glViewport(0, 0, display_w, display_h);
+    glClearColor(CLEAR_COLOR.x * CLEAR_COLOR.w, CLEAR_COLOR.y * CLEAR_COLOR.w, CLEAR_COLOR.z * CLEAR_COLOR.w, CLEAR_COLOR.w);
     glClear(GL_COLOR_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -521,6 +604,20 @@ bool valid_tiff(Application &app)
              (app.archive_data.decompressed_data[0] == 'M' && app.archive_data.decompressed_data[1] == 'M' && app.archive_data.decompressed_data[2] == 0x00 && app.archive_data.decompressed_data[3] == 0x2A))); // Big-endian TIFF
 }
 
+bool check_valid_xac(Application &app)
+{
+    const std::string &filename = app.ipf_root.ipf_file_table[app.archive_data.selected_number].directory_name;
+
+    if (filename.find("xac") != std::string::npos ||
+        filename.find("XAC") != std::string::npos)
+    {
+        return true;
+    }
+    return (app.archive_data.decompressed_data.size() >= 4 &&
+            app.archive_data.decompressed_data[0] == 'X' && app.archive_data.decompressed_data[1] == 'A' &&
+            app.archive_data.decompressed_data[2] == 'C' && app.archive_data.decompressed_data[3] == ' '); // "XAC "
+}
+
 bool check_valid_image(Application &app)
 {
     return valid_png(app) || valid_jpeg(app) ||
@@ -541,11 +638,224 @@ bool valid_text(Application &app)
              filename.compare(filename.size() - 9, 9, ".3deffect") == 0 ||
              filename.compare(filename.size() - 7, 7, ".3dprop") == 0 ||
              filename.compare(filename.size() - 9, 9, ".3drender") == 0 ||
+             filename.compare(filename.size() - 8, 8, ".3dworld") == 0 ||
+             filename.compare(filename.size() - 7, 7, ".3dzone") == 0 ||
              filename.compare(filename.size() - 3, 3, ".fx") == 0 ||
              filename.compare(filename.size() - 4, 4, ".fxh") == 0 ||
              filename.compare(filename.size() - 7, 7, ".sprbin") == 0 ||
              filename.compare(filename.size() - 5, 5, ".sani") == 0 ||
              filename.compare(filename.size() - 4, 4, ".xml") == 0));
+}
+
+GLuint compileShader(GLenum type, const std::string &source)
+{
+    GLuint shader = glCreateShader(type);
+    const char *src = source.c_str();
+    glShaderSource(shader, 1, &src, nullptr);
+    glCompileShader(shader);
+
+    // Check for errors
+    int success;
+    char infoLog[512];
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+    if (!success)
+    {
+        glGetShaderInfoLog(shader, 512, nullptr, infoLog);
+        printf("Shader Compilation Error: %s\n", infoLog);
+    }
+
+    return shader;
+}
+
+GLuint createShaderProgram()
+{
+    GLuint vertexShader = compileShader(GL_VERTEX_SHADER, vertexShaderSource);
+    GLuint fragmentShader = compileShader(GL_FRAGMENT_SHADER, fragmentShaderSource);
+
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vertexShader);
+    glAttachShader(program, fragmentShader);
+    glLinkProgram(program);
+
+    // Check for linking errors
+    int success;
+    char infoLog[512];
+    glGetProgramiv(program, GL_LINK_STATUS, &success);
+    if (!success)
+    {
+        glGetProgramInfoLog(program, 512, nullptr, infoLog);
+        printf("Shader Program Linking Error: %s\n", infoLog);
+    }
+
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    return program;
+}
+
+void mouse_callback(GLFWwindow *window, double xpos, double ypos)
+{
+    if (temp_render_data.preview_tab_active)
+    {
+
+        if (temp_render_data.is_dragging)
+        {
+            float dx = xpos - temp_render_data.last_x;
+            float dy = ypos - temp_render_data.last_y;
+            temp_render_data.rotation_x += dy * 0.5f;
+            temp_render_data.rotation_y += dx * 0.5f;
+        }
+        temp_render_data.last_x = xpos;
+        temp_render_data.last_y = ypos;
+    }
+}
+
+void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
+{
+    if (temp_render_data.preview_tab_active)
+    {
+        temp_render_data.zoom -= (float)yoffset * 0.5f;
+        if (temp_render_data.zoom < 1.0f)
+            temp_render_data.zoom = 1.0f;
+        if (temp_render_data.zoom > 10.0f)
+            temp_render_data.zoom = 10.0f;
+    }
+}
+
+void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
+{
+    if (temp_render_data.preview_tab_active)
+    {
+        if (button == GLFW_MOUSE_BUTTON_LEFT)
+        {
+            temp_render_data.is_dragging = (action == GLFW_PRESS);
+            glfwGetCursorPos(window, &temp_render_data.last_x, &temp_render_data.last_y);
+        }
+    }
+}
+
+void setupFramebuffer(int width, int height)
+{
+    if (temp_render_data.FBO == 0)
+    {
+        glGenFramebuffers(1, &temp_render_data.FBO);
+        glGenTextures(1, &temp_render_data.texture_color_buffer);
+        glGenRenderbuffers(1, &temp_render_data.RBO);
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, temp_render_data.FBO);
+
+    // Setup color attachment (texture)
+    glBindTexture(GL_TEXTURE_2D, temp_render_data.texture_color_buffer);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, temp_render_data.texture_color_buffer, 0);
+
+    // Setup depth and stencil buffer
+    glBindRenderbuffer(GL_RENDERBUFFER, temp_render_data.RBO);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, temp_render_data.RBO);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        std::cerr << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void render_model(Application &app)
+{
+
+    temp_render_data.preview_tab_active = app.preview_tab_active;
+
+    // Get panel size
+    ImVec2 previewSize = ImGui::GetContentRegionAvail();
+    int width = static_cast<int>(previewSize.x);
+    int height = static_cast<int>(previewSize.y);
+
+    // Ensure framebuffer is set up with correct size
+    setupFramebuffer(width, height);
+
+    // Bind framebuffer
+    glBindFramebuffer(GL_FRAMEBUFFER, temp_render_data.FBO);
+    glViewport(0, 0, width, height);
+    glEnable(GL_DEPTH_TEST);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    if (temp_render_data.shader_program == 0)
+    {
+        temp_render_data.shader_program = createShaderProgram();
+    }
+
+    if (temp_render_data.VAO == 0)
+    {
+        float vertices[] = {
+            // Positions         // Colors
+            -1.0f, -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, // 0
+            1.0f, -1.0f, -1.0f, 0.0f, 1.0f, 0.0f,  // 1
+            1.0f, 1.0f, -1.0f, 0.0f, 0.0f, 1.0f,   // 2
+            -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 0.0f,  // 3
+            -1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 1.0f,  // 4
+            1.0f, -1.0f, 1.0f, 0.0f, 1.0f, 1.0f,   // 5
+            1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,    // 6
+            -1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f    // 7
+        };
+
+        unsigned int indices[] = {
+            0, 1, 2, 2, 3, 0, // Front
+            1, 5, 6, 6, 2, 1, // Right
+            5, 4, 7, 7, 6, 5, // Back
+            4, 0, 3, 3, 7, 4, // Left
+            3, 2, 6, 6, 7, 3, // Top
+            4, 5, 1, 1, 0, 4  // Bottom
+        };
+
+        glGenVertexArrays(1, &temp_render_data.VAO);
+        glGenBuffers(1, &temp_render_data.VBO);
+        glGenBuffers(1, &temp_render_data.EBO);
+
+        glBindVertexArray(temp_render_data.VAO);
+        glBindBuffer(GL_ARRAY_BUFFER, temp_render_data.VBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, temp_render_data.EBO);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
+        glEnableVertexAttribArray(0);
+
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(3 * sizeof(float)));
+        glEnableVertexAttribArray(1);
+    }
+
+    // Setup camera matrices
+    float aspectRatio = (float)width / (float)height;
+    glm::mat4 projection = glm::perspective(glm::radians(45.0f), aspectRatio, 0.1f, 100.0f);
+    glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 0.0f, temp_render_data.zoom), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::rotate(model, glm::radians(temp_render_data.rotation_x), glm::vec3(1.0f, 0.0f, 0.0f));
+    model = glm::rotate(model, glm::radians(temp_render_data.rotation_y), glm::vec3(0.0f, 1.0f, 0.0f));
+
+    glUseProgram(temp_render_data.shader_program);
+
+    GLint modelLoc = glGetUniformLocation(temp_render_data.shader_program, "model");
+    GLint viewLoc = glGetUniformLocation(temp_render_data.shader_program, "view");
+    GLint projLoc = glGetUniformLocation(temp_render_data.shader_program, "projection");
+
+    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, &model[0][0]);
+    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(projLoc, 1, GL_FALSE, &projection[0][0]);
+
+    // Render cube
+    glBindVertexArray(temp_render_data.VAO);
+    glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0); // Unbind framebuffer
+
+    // Draw ImGui Panel
+    ImGui::Image((ImTextureID)temp_render_data.texture_color_buffer, previewSize, ImVec2(0, 1), ImVec2(1, 0));
 }
 
 void render_image(Application &app)
@@ -554,49 +864,49 @@ void render_image(Application &app)
     if (app.archive_data.last_selected_image == app.archive_data.last_selected_number)
     {
         // Just display the cached image
-        ImGui::Text("Image Info : %d width x %d height %d channels", app.archive_data.width, app.archive_data.height, app.archive_data.channels);
-        ImGui::Image((ImTextureID)app.archive_data.texture, ImVec2(app.archive_data.width, app.archive_data.height));
+        ImGui::Text("Image Info : %d width x %d height %d channels", app.image_data.image_width, app.image_data.image_height, app.image_data.image_channel);
+        ImGui::Image((ImTextureID)app.image_data.texture_id, ImVec2(app.image_data.image_width, app.image_data.image_height));
         return;
     }
 
-    if (app.archive_data.texture == 0)
+    if (app.image_data.texture_id == 0)
     {
-        glGenTextures(1, &app.archive_data.texture);
+        glGenTextures(1, &app.image_data.texture_id);
     }
 
     // Load new image
-    app.archive_data.image_data = stbi_load_from_memory(app.archive_data.decompressed_data.data(), static_cast<int>(app.archive_data.decompressed_data.size()),
-                                                        &app.archive_data.width, &app.archive_data.height,
-                                                        &app.archive_data.channels, 4);
-    if (!app.archive_data.image_data)
+    app.image_data.image_buffer = stbi_load_from_memory(app.archive_data.decompressed_data.data(), static_cast<int>(app.archive_data.decompressed_data.size()),
+                                                        &app.image_data.image_width, &app.image_data.image_height,
+                                                        &app.image_data.image_channel, 4);
+    if (!app.image_data.image_buffer)
     {
         ImGui::Text("Failed to load image.");
         return;
     }
 
-    ImGui::Text("Image Info : %d width x %d height %d channels", app.archive_data.width, app.archive_data.height, app.archive_data.channels);
+    ImGui::Text("Image Info : %d width x %d height %d channels", app.image_data.image_width, app.image_data.image_height, app.image_data.image_channel);
 
     // Generate texture if not created
-    glGenTextures(1, &app.archive_data.texture);
-    glBindTexture(GL_TEXTURE_2D, app.archive_data.texture);
+    glGenTextures(1, &app.image_data.texture_id);
+    glBindTexture(GL_TEXTURE_2D, app.image_data.texture_id);
 
     // Upload to OpenGL
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, app.archive_data.width, app.archive_data.height,
-                 0, GL_RGBA, GL_UNSIGNED_BYTE, app.archive_data.image_data);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, app.image_data.image_width, app.image_data.image_height,
+                 0, GL_RGBA, GL_UNSIGNED_BYTE, app.image_data.image_buffer);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     // Free image data (no longer needed after uploading to OpenGL)
-    stbi_image_free(app.archive_data.image_data);
-    app.archive_data.image_data = nullptr;
+    stbi_image_free(app.image_data.image_buffer);
+    app.image_data.image_buffer = nullptr;
 
     // Update last selected number to avoid reloading
     app.archive_data.last_selected_image = app.archive_data.selected_number;
 
     // Display image
-    ImGui::Image((ImTextureID)app.archive_data.texture, ImVec2(app.archive_data.width, app.archive_data.height));
+    ImGui::Image((ImTextureID)app.image_data.texture_id, ImVec2(app.image_data.image_width, app.image_data.image_height));
 }
 
 void render_dds_image(Application &app)
@@ -677,12 +987,12 @@ void render_dds_image(Application &app)
         }
     }
 
-    if (app.archive_data.texture == 0)
+    if (app.image_data.texture_id == 0)
     {
-        glGenTextures(1, &app.archive_data.texture);
+        glGenTextures(1, &app.image_data.texture_id);
     }
 
-    glBindTexture(GL_TEXTURE_2D, app.archive_data.texture);
+    glBindTexture(GL_TEXTURE_2D, app.image_data.texture_id);
 
     // Calculate block size
     size_t blockSize = (format == GL_COMPRESSED_RGBA_S3TC_DXT1_EXT || format == GL_COMPRESSED_RED_RGTC1) ? 8 : 16;
@@ -706,11 +1016,11 @@ void render_dds_image(Application &app)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     // Store metadata
-    app.archive_data.width = ddsHeader->width;
-    app.archive_data.height = ddsHeader->height;
+    app.image_data.image_width = ddsHeader->width;
+    app.image_data.image_height = ddsHeader->height;
 
-    ImGui::Text("DDS Image: %d x %d", app.archive_data.width, app.archive_data.height);
-    ImGui::Image((ImTextureID)app.archive_data.texture, ImVec2(app.archive_data.width, app.archive_data.height));
+    ImGui::Text("DDS Image: %d x %d", app.image_data.image_width, app.image_data.image_height);
+    ImGui::Image((ImTextureID)app.image_data.texture_id, ImVec2(app.image_data.image_width, app.image_data.image_height));
 }
 
 void render_text(Application &app)
@@ -753,6 +1063,10 @@ void render_preview_tab(Application &app)
         {
             render_text(app);
         }
+        else if (check_valid_xac(app))
+        {
+            render_model(app);
+        }
     }
     else
     {
@@ -766,7 +1080,7 @@ void middle_panel(Application &app)
 
     if (ImGui::BeginTabBar("IPF Data Tabs"))
     {
-        app.archive_data.preview_tab_active = false; // Reset flag before checking active tab
+        app.preview_tab_active = false; // Reset flag before checking active tab
 
         if (ImGui::BeginTabItem("Decompressed"))
         {
@@ -776,12 +1090,12 @@ void middle_panel(Application &app)
 
         if (ImGui::BeginTabItem("Preview"))
         {
-            if (ImGui::IsItemFocused())
+            if (ImGui::IsWindowHovered())
             {
 
-                if (!app.archive_data.preview_tab_active)
+                if (!app.preview_tab_active)
                 {
-                    app.archive_data.preview_tab_active = true;
+                    app.preview_tab_active = true;
                 }
             }
             render_preview_tab(app);
@@ -870,9 +1184,9 @@ void render_panel(Application &app)
         if (app.archive_data.selected_number != app.archive_data.last_selected_number)
         {
             // Reset image properties
-            app.archive_data.width = 0;
-            app.archive_data.height = 0;
-            app.archive_data.channels = 0;
+            app.image_data.image_width = 0;
+            app.image_data.image_height = 0;
+            app.image_data.image_channel = 0;
 
             app.archive_data.decompressed_data = extract_data(app.ipf_root, app.archive_data.selected_number);
             app.archive_data.last_selected_number = app.archive_data.selected_number;

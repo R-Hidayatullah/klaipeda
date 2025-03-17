@@ -8,9 +8,11 @@
 #include <zlib.h>
 #include <fstream>
 #include <iomanip>
-#include <stdio.h>
-#include <ctype.h>
+#include <chrono>
+#include <cctype>
+#include <cstdio>
 #include <map>
 #include <sstream>
+#include <thread>
 
 #endif // KLAIPEDA_H
