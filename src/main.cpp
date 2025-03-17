@@ -3,7 +3,7 @@
 int main()
 {
     Application app{};
-    app.ipf_root.file_path = "/home/ridwan/Documents/TreeOfSaviorCN/data/char_hi.ipf";
+    app.ipf_root.file_path = "C:\\Users\\Ridwan Hidayatullah\\Documents\\TreeOfSaviorCN\\data\\bg_texture.ipf";
     parse_ipf(app.ipf_root);
     if (!initialize(app))
         return -1;

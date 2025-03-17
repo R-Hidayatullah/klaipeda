@@ -10,6 +10,52 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+#define DDS_MAGIC 0x20534444 // "DDS " in little-endian
+#define DDS_FOURCC 0x00000004
+#define DDS_DX10 0x30315844 // "DX10"
+
+struct DDSHeader
+{
+    uint32_t magic;
+    uint32_t size;
+    uint32_t flags;
+    uint32_t height;
+    uint32_t width;
+    uint32_t pitchOrLinearSize;
+    uint32_t depth;
+    uint32_t mipMapCount;
+    uint32_t reserved1[11];
+
+    struct
+    {
+        uint32_t size;
+        uint32_t flags;
+        uint32_t fourCC;
+        uint32_t rgbBitCount;
+        uint32_t rBitMask;
+        uint32_t gBitMask;
+        uint32_t bBitMask;
+        uint32_t aBitMask;
+    } pixelFormat;
+
+    struct
+    {
+        uint32_t caps1;
+        uint32_t caps2;
+        uint32_t reserved[2];
+    } caps;
+    uint32_t reserved2;
+};
+
+struct DDSHeaderDX10
+{
+    uint32_t dxgiFormat;
+    uint32_t resourceDimension;
+    uint32_t miscFlag;
+    uint32_t arraySize;
+    uint32_t miscFlags2;
+};
+
 // Recursive structure for nested directories
 struct DirectoryNode
 {
@@ -526,6 +572,120 @@ void render_image(Application &app)
     ImGui::Image((ImTextureID)app.archive_data.texture, ImVec2(app.archive_data.width, app.archive_data.height));
 }
 
+void render_dds_image(Application &app)
+{
+    if (app.archive_data.decompressed_data.size() < sizeof(DDSHeader))
+    {
+        ImGui::Text("Invalid DDS file.");
+        return;
+    }
+
+    const DDSHeader *ddsHeader = reinterpret_cast<const DDSHeader *>(app.archive_data.decompressed_data.data());
+    if (ddsHeader->magic != DDS_MAGIC)
+    {
+        ImGui::Text("Invalid DDS header.");
+        return;
+    }
+
+    size_t offset = sizeof(DDSHeader);
+    GLenum format = 0;
+
+    // Check for DX10 header
+    if (ddsHeader->pixelFormat.fourCC == DDS_DX10)
+    {
+        if (app.archive_data.decompressed_data.size() < offset + sizeof(DDSHeaderDX10))
+        {
+            ImGui::Text("Invalid DDS DX10 file.");
+            return;
+        }
+        const DDSHeaderDX10 *dx10Header = reinterpret_cast<const DDSHeaderDX10 *>(app.archive_data.decompressed_data.data() + offset);
+        offset += sizeof(DDSHeaderDX10);
+
+        // DXGI_FORMAT mapping
+        switch (dx10Header->dxgiFormat)
+        {
+        case 71:
+            format = GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
+            break; // BC1
+        case 74:
+            format = GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
+            break; // BC2
+        case 77:
+            format = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+            break; // BC3
+        case 80:
+            format = GL_COMPRESSED_RED_RGTC1;
+            break; // BC4
+        case 83:
+            format = GL_COMPRESSED_RG_RGTC2;
+            break; // BC5
+        case 95:
+            format = GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT_ARB;
+            break; // BC6H
+        case 98:
+            format = GL_COMPRESSED_RGBA_BPTC_UNORM_ARB;
+            break; // BC7
+        default:
+            ImGui::Text("Unsupported DX10 DDS format.");
+            return;
+        }
+    }
+    else
+    {
+        // Legacy DDS formats
+        switch (ddsHeader->pixelFormat.fourCC)
+        {
+        case 0x31545844:
+            format = GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
+            break; // "DXT1"
+        case 0x33545844:
+            format = GL_COMPRESSED_RGBA_S3TC_DXT3_EXT;
+            break; // "DXT3"
+        case 0x35545844:
+            format = GL_COMPRESSED_RGBA_S3TC_DXT5_EXT;
+            break; // "DXT5"
+        default:
+            ImGui::Text("Unsupported legacy DDS format.");
+            return;
+        }
+    }
+
+    if (app.archive_data.texture == 0)
+    {
+        glGenTextures(1, &app.archive_data.texture);
+    }
+
+    glBindTexture(GL_TEXTURE_2D, app.archive_data.texture);
+
+    // Calculate block size
+    size_t blockSize = (format == GL_COMPRESSED_RGBA_S3TC_DXT1_EXT || format == GL_COMPRESSED_RED_RGTC1) ? 8 : 16;
+    size_t dataSize = app.archive_data.decompressed_data.size() - offset;
+
+    // Use only level 0 (no mipmaps yet)
+    size_t imageSize = ((ddsHeader->width + 3) / 4) * ((ddsHeader->height + 3) / 4) * blockSize;
+    if (imageSize > dataSize)
+    {
+        ImGui::Text("DDS file size mismatch.");
+        return;
+    }
+
+    glCompressedTexImage2D(GL_TEXTURE_2D, 0, format, ddsHeader->width, ddsHeader->height, 0, imageSize,
+                           app.archive_data.decompressed_data.data() + offset);
+
+    // Disable mipmapping (for debugging)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // Store metadata
+    app.archive_data.width = ddsHeader->width;
+    app.archive_data.height = ddsHeader->height;
+
+    ImGui::Text("DDS Image: %d x %d", app.archive_data.width, app.archive_data.height);
+    ImGui::Image((ImTextureID)app.archive_data.texture, ImVec2(app.archive_data.width, app.archive_data.height));
+}
+
 void render_preview_tab(Application &app)
 {
     ImGui::Text("Preview Data:");
@@ -535,7 +695,14 @@ void render_preview_tab(Application &app)
 
         if (check_valid_image(app))
         {
-            render_image(app);
+            if (valid_dds(app))
+            {
+                render_dds_image(app);
+            }
+            else
+            {
+                render_image(app);
+            }
         }
     }
     else
