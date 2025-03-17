@@ -88,6 +88,7 @@ struct Application
     bool running;
     IPF_Root ipf_root;
     ArchiveData archive_data;
+    ImFont *font;
 };
 
 // Function declarations
@@ -141,6 +142,12 @@ bool initialize(Application &app)
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
     // io.IniFilename = nullptr; // 🚫 Disable .ini file
+    ImFont *defaultFont = io.Fonts->AddFontDefault();
+    app.font = io.Fonts->AddFontFromFileTTF(
+        "NotoSansKR-Regular.ttf",
+        18.0f,
+        nullptr,
+        io.Fonts->GetGlyphRangesKorean());
 
     // Setup ImGui backend
     ImGui_ImplGlfw_InitForOpenGL(app.window, true);
@@ -521,6 +528,25 @@ bool check_valid_image(Application &app)
            valid_tga(app) || valid_gif(app) ||
            valid_tiff(app);
 }
+
+bool valid_text(Application &app)
+{
+    const std::string &filename = app.ipf_root.ipf_file_table[app.archive_data.selected_number].directory_name;
+    return (filename.size() >= 4 &&
+            (filename.compare(filename.size() - 4, 4, ".lua") == 0 ||
+             filename.compare(filename.size() - 4, 4, ".effect") == 0 ||
+             filename.compare(filename.size() - 4, 4, ".skn") == 0 ||
+             filename.compare(filename.size() - 4, 4, ".xsd") == 0 ||
+             filename.compare(filename.size() - 4, 4, ".3deffect") == 0 ||
+             filename.compare(filename.size() - 4, 4, ".3dprop") == 0 ||
+             filename.compare(filename.size() - 4, 4, ".3drender") == 0 ||
+             filename.compare(filename.size() - 4, 4, ".fx") == 0 ||
+             filename.compare(filename.size() - 4, 4, ".fxh") == 0 ||
+             filename.compare(filename.size() - 4, 4, ".sprbin") == 0 ||
+             filename.compare(filename.size() - 4, 4, ".sani") == 0 ||
+             filename.compare(filename.size() - 4, 4, ".xml") == 0));
+}
+
 void render_image(Application &app)
 {
     // Check if the same file is already loaded
@@ -686,6 +712,24 @@ void render_dds_image(Application &app)
     ImGui::Image((ImTextureID)app.archive_data.texture, ImVec2(app.archive_data.width, app.archive_data.height));
 }
 
+void render_text(Application &app)
+{
+    const char *text_content = reinterpret_cast<const char *>(app.archive_data.decompressed_data.data());
+
+    ImVec2 child_size = ImVec2(0, 0); // Adjust height as needed
+    ImGui::BeginChild("TextPreview", child_size, true, ImGuiWindowFlags_HorizontalScrollbar);
+
+    if (app.font)
+        ImGui::PushFont(app.font); // Apply Hangul-compatible font
+
+    ImGui::TextUnformatted(text_content);
+
+    if (app.font)
+        ImGui::PopFont(); // Revert to default font
+
+    ImGui::EndChild();
+}
+
 void render_preview_tab(Application &app)
 {
     ImGui::Text("Preview Data:");
@@ -703,6 +747,10 @@ void render_preview_tab(Application &app)
             {
                 render_image(app);
             }
+        }
+        else if (valid_text(app))
+        {
+            render_text(app);
         }
     }
     else
