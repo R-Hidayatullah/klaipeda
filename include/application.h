@@ -232,6 +232,8 @@ bool initialize(Application &app)
     ImGui_ImplOpenGL3_Init("#version 330");
     ImGui::StyleColorsLight();
 
+    app.archive_data.decompressed_data = extract_data(app.ipf_root, app.archive_data.selected_number);
+
     app.running = true;
     return true;
 }
@@ -1174,6 +1176,13 @@ void right_panel(Application &app)
     ImGui::End();
 }
 
+void reset_render_preview(RenderData &render_data)
+{
+    render_data.rotation_x = 0.0f;
+    render_data.rotation_y = 0.0f;
+    render_data.zoom = 10.0f;
+}
+
 // Render the UI panels
 void render_panel(Application &app)
 {
@@ -1187,7 +1196,8 @@ void render_panel(Application &app)
             app.image_data.image_width = 0;
             app.image_data.image_height = 0;
             app.image_data.image_channel = 0;
-
+            reset_render_preview(app.render_data);
+            reset_render_preview(temp_render_data);
             app.archive_data.decompressed_data = extract_data(app.ipf_root, app.archive_data.selected_number);
             app.archive_data.last_selected_number = app.archive_data.selected_number;
         }
