@@ -1052,20 +1052,89 @@ void render_dds_image(Application &app)
     ImGui::Image((ImTextureID)app.image_data.texture_id, ImVec2(app.image_data.image_width, app.image_data.image_height));
 }
 
+std::string remove_bom(const std::string &str)
+{
+    if (str.size() >= 3 &&
+        (unsigned char)str[0] == 0xEF &&
+        (unsigned char)str[1] == 0xBB &&
+        (unsigned char)str[2] == 0xBF)
+    {
+        // UTF-8 BOM
+        return str.substr(3);
+    }
+    else if (str.size() >= 2 &&
+             (unsigned char)str[0] == 0xFF &&
+             (unsigned char)str[1] == 0xFE)
+    {
+        // UTF-16 LE BOM
+        return str.substr(2);
+    }
+    else if (str.size() >= 2 &&
+             (unsigned char)str[0] == 0xFE &&
+             (unsigned char)str[1] == 0xFF)
+    {
+        // UTF-16 BE BOM
+        return str.substr(2);
+    }
+    else if (str.size() >= 4 &&
+             (unsigned char)str[0] == 0xFF &&
+             (unsigned char)str[1] == 0xFE &&
+             (unsigned char)str[2] == 0x00 &&
+             (unsigned char)str[3] == 0x00)
+    {
+        // UTF-32 LE BOM
+        return str.substr(4);
+    }
+    else if (str.size() >= 4 &&
+             (unsigned char)str[0] == 0x00 &&
+             (unsigned char)str[1] == 0x00 &&
+             (unsigned char)str[2] == 0xFE &&
+             (unsigned char)str[3] == 0xFF)
+    {
+        // UTF-32 BE BOM
+        return str.substr(4);
+    }
+
+    return str; // No BOM found
+}
+
 void render_text(Application &app)
 {
-    const char *text_content = reinterpret_cast<const char *>(app.archive_data.decompressed_data.data());
+    const char *raw_content = reinterpret_cast<const char *>(app.archive_data.decompressed_data.data());
+    size_t data_size = app.archive_data.decompressed_data.size();
 
-    ImVec2 child_size = ImVec2(0, 0); // Adjust height as needed
+    std::string normalized;
+    normalized.reserve(data_size);
+
+    for (size_t i = 0; i < data_size; ++i)
+    {
+        char c = raw_content[i];
+
+        if (c == '\r')
+        {
+            // If next char is '\n', skip this '\r' to collapse CRLF to LF
+            if (i + 1 < data_size && raw_content[i + 1] == '\n')
+                continue;
+            else
+                // Standalone CR (old Mac), convert to LF
+                normalized.push_back('\n');
+        }
+        else
+        {
+            normalized.push_back(c);
+        }
+    }
+    normalized = remove_bom(normalized);
+    ImVec2 child_size = ImVec2(0, 0);
     ImGui::BeginChild("TextPreview", child_size, true, ImGuiWindowFlags_HorizontalScrollbar);
 
     if (app.font)
-        ImGui::PushFont(app.font); // Apply Hangul-compatible font
+        ImGui::PushFont(app.font);
 
-    ImGui::TextUnformatted(text_content);
+    ImGui::TextUnformatted(normalized.c_str());
 
     if (app.font)
-        ImGui::PopFont(); // Revert to default font
+        ImGui::PopFont();
 
     ImGui::EndChild();
 }
