@@ -353,8 +353,23 @@ void renderMenuBar()
     }
 }
 
+// Helper: get just the filename from a path
+static std::string get_basename(const std::string &path)
+{
+    size_t pos = path.find_last_of("/\\");
+    if (pos == std::string::npos)
+        return path;
+    return path.substr(pos + 1);
+}
+
 void insert_into_tree(DirectoryNode &root, const std::string &path, int file_index)
 {
+    if (path.empty())
+    {
+        // Root-level file
+        root.files.push_back(file_index);
+        return;
+    }
     size_t last_slash = path.find_last_of('/');
 
     std::string directory = (last_slash == std::string::npos) ? "" : path.substr(0, last_slash);
@@ -424,6 +439,18 @@ void left_panel(Application &app)
     // Display the directory tree
     ImVec2 child_size = ImVec2(0, 0);
     ImGui::BeginChild("IPFDataTree", child_size, true, ImGuiWindowFlags_HorizontalScrollbar);
+
+    // Show root-level files (always visible, no tree click needed)
+    for (size_t file_index : app.archive_data.directory_node.files)
+    {
+        const auto &entry = app.ipf_root.ipf_file_table[file_index];
+        std::string filename = get_basename(entry.directory_name); // just filename
+        if (ImGui::Selectable(filename.c_str(),
+                              app.archive_data.selected_number == file_index))
+        {
+            app.archive_data.selected_number = file_index;
+        }
+    }
 
     for (auto it = app.archive_data.directory_node.subdirectories.begin();
          it != app.archive_data.directory_node.subdirectories.end(); ++it)

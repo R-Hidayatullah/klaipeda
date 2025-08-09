@@ -1,12 +1,10 @@
 cmake_minimum_required(VERSION 3.10.0)
 project(klaipeda VERSION 0.1.0 LANGUAGES C CXX)
 
-# Set C++11 standard with strict ISO compliance
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Include directories
 include_directories(
     include
     external/glad33core/include
@@ -15,14 +13,34 @@ include_directories(
     external/imgui-docking
     external/imgui-docking/backends
     external/stb-master
+    external/zlib-1.3.1
 )
 
-# Link directories (for GLFW and other compiled libraries)
 link_directories(
-    external/glfw-3.4.bin.WIN64/lib-mingw-w64  # Adjust based on your compiler (e.g., lib-vc2022 for MSVC)
+    external/glfw-3.4.bin.WIN64/lib-mingw-w64
 )
 
-# Add the executable
+set(ZLIB_SRC
+    external/zlib-1.3.1/adler32.c
+    external/zlib-1.3.1/compress.c
+    external/zlib-1.3.1/crc32.c
+    external/zlib-1.3.1/deflate.c
+    external/zlib-1.3.1/gzclose.c
+    external/zlib-1.3.1/gzlib.c
+    external/zlib-1.3.1/gzread.c
+    external/zlib-1.3.1/gzwrite.c
+    external/zlib-1.3.1/infback.c
+    external/zlib-1.3.1/inffast.c
+    external/zlib-1.3.1/inflate.c
+    external/zlib-1.3.1/inftrees.c     
+    external/zlib-1.3.1/trees.c
+    external/zlib-1.3.1/uncompr.c
+    external/zlib-1.3.1/zutil.c
+)
+add_library(zlib STATIC ${ZLIB_SRC})
+target_include_directories(zlib PUBLIC external/zlib-1.3.1)
+
+
 add_executable(klaipeda 
     external/imgui-docking/imgui_demo.cpp
     external/imgui-docking/imgui_draw.cpp
@@ -33,13 +51,11 @@ add_executable(klaipeda
     external/imgui-docking/backends/imgui_impl_opengl3.cpp 
     external/glad33core/src/glad.c
     external/stb-master/stb_vorbis.c
-    src/main.cpp)
+    src/main.cpp
+)
 
-# Link libraries
 target_link_libraries(klaipeda
     glfw3
     opengl32
-    pthread
-    z
-    m
+    zlib
 )
