@@ -102,35 +102,6 @@ typedef struct
 
 #pragma pack(pop) // Restore default alignment
 
-// Template function to read binary data into a given type
-template <typename T>
-void read(std::ifstream &file, T &data)
-{
-    file.read(reinterpret_cast<char *>(&data), sizeof(T));
-}
-
-// Function to read a string with a given length
-void read(std::ifstream &file, std::string &data, uint16_t length)
-{
-    data.resize(length);
-    file.read(&data[0], length);
-}
-
-// Specialization for std::vector<T>
-template <typename T>
-void read(std::ifstream &file, std::vector<T> &data, size_t count)
-{
-    data.resize(count);
-    file.read(reinterpret_cast<char *>(data.data()), sizeof(T) * count);
-}
-
-// Specialization for std::array<T, N>
-template <typename T, size_t N>
-void read(std::ifstream &file, std::array<T, N> &data)
-{
-    file.read(reinterpret_cast<char *>(data.data()), sizeof(T) * N);
-}
-
 bool parse_ipf(IPF_Root &ipf_root)
 {
     std::ifstream file(ipf_root.file_path, std::ios::binary);
