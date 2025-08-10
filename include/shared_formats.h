@@ -116,6 +116,7 @@ struct FileTime
     int8_t mHours;
     int8_t mMinutes;
     int8_t mSeconds;
+    uint8_t padding;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -130,6 +131,7 @@ struct FileMotionEvent3
     float mEndTime;
     uint32_t mEventTypeIndex; // index into the event type string table
     uint16_t mParamIndex;     // index into the parameter string table
+    uint8_t padding[2];
 };
 
 // motion event track (for file formats with a single track)
@@ -152,6 +154,7 @@ struct FileMotionEventTrack2
     uint32_t mNumTypeStrings;
     uint32_t mNumParamStrings;
     uint8_t mIsEnabled;
+    uint8_t padding[3];
 
     // followed by:
     // String track name
