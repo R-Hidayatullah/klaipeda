@@ -318,8 +318,8 @@ struct XAC_Node3
     uint32_t mSkeletalLODs;    // each bit representing if the node is active or not, in the give LOD (bit number)
     uint32_t mParentIndex;     // parent node number, or 0xFFFFFFFF in case of a root node
     uint8_t mNodeFlags;        // #1 bit boolean specifies whether we have to include this node in the bounds calculation or not
-    float mOBB[16];
     uint8_t padding[3];
+    float mOBB[16];
 
     std::string mNodeName;
 
@@ -340,9 +340,9 @@ struct XAC_Node4
     uint32_t mParentIndex;     // parent node number, or 0xFFFFFFFF in case of a root node
     uint32_t mNumChilds;       // the number of child nodes
     uint8_t mNodeFlags;        // #1 bit boolean specifies whether we have to include this node in the bounds calculation or not
+    uint8_t padding[3];
     float mOBB[16];
     float mImportanceFactor; // importance factor used for the automatic motion lod
-    uint8_t padding[3];
 
     std::string mNodeName;
 
@@ -374,9 +374,9 @@ struct XAC_SkinningInfo
     uint8_t padding[3];
 
     // followed by:
-    // for all mesh org num vertices
-    //     uint8_t numInfluences
-    //         XAC_SkinInfluence[numInfluences];
+    //  for all mesh org num vertices
+    //      uint8_t numInfluences
+    //      XAC_SkinInfluence[numInfluences];
 };
 
 struct XAC_SkinningInfo2
@@ -427,7 +427,8 @@ struct XAC_SkinningInfoTableEntry
 struct XAC_SkinInfluence
 {
     float mWeight;
-    uint32_t mNodeNr;
+    uint16_t mNodeNr;
+    uint8_t padding[2];
 };
 
 // standard material
@@ -535,7 +536,7 @@ struct XAC_VertexAttributeLayer
     uint32_t mAttribSizeInBytes; // the size of a single vertex attribute of this type, in bytes
     uint8_t mEnableDeformations; // enable deformations on this layer?
     uint8_t mIsScale;            // is this a scale value, or not? (coordinate system conversion thing)
-    uint8_t padding[3];
+    uint8_t padding[2];
 
     // followed by:
     // (sizeof(mAttribSizeInBytes) * mesh.numVertices) bytes, or mesh.numVertices mDataType objects
@@ -600,7 +601,8 @@ struct XAC_Limit
     FileVector3 mScaleMin;       // the minimum scale values
     FileVector3 mScaleMax;       // the maximum scale values
     uint8_t mLimitFlags[9];      // the limit type activation flags
-    uint32_t mNodeNumber;        // the node number where this info belongs to
+    uint8_t padding[3];
+    uint32_t mNodeNumber; // the node number where this info belongs to
 };
 
 // a progressive morph target mesh
@@ -770,6 +772,7 @@ struct XAC_NodeGroup
 {
     uint16_t mNumNodes;
     uint8_t mDisabledOnDefault; // 0 = no, 1 = yes
+    uint8_t padding;
 
     // followed by:
     // string : name

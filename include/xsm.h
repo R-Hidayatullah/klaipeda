@@ -44,6 +44,7 @@ struct XSM_Info
     uint32_t mMotionFPS; // the motion frame rate
     uint8_t mExporterHighVersion;
     uint8_t mExporterLowVersion;
+    uint8_t padding[2];
 
     // followed by:
     // string : source application (e.g. "3D Studio MAX 7", "Maya 6.5")
@@ -60,6 +61,7 @@ struct XSM_Info2
     uint32_t mMotionFPS; // the motion frame rate
     uint8_t mExporterHighVersion;
     uint8_t mExporterLowVersion;
+    uint8_t padding[2];
 
     // followed by:
     // string : source application (e.g. "3D Studio MAX 7", "Maya 6.5")
@@ -77,6 +79,7 @@ struct XSM_Info3
     uint32_t mMotionExtractionMask; // motion extraction mask
     uint8_t mExporterHighVersion;
     uint8_t mExporterLowVersion;
+    uint8_t padding[2];
 
     // followed by:
     // string : source application (e.g. "3D Studio MAX 7", "Maya 6.5")
@@ -233,10 +236,11 @@ struct XSM_WaveletInfo
     float mMaxTime;
     uint8_t mWaveletID;    // see the enum with XSM_WAVELET_HAAR etc
     uint8_t mCompressorID; // see the enum with XSM_COMPRESSOR_HUFFMAN inside
+    uint8_t padding[2];
 
     // followed by:
     //		XSM_WaveletMapping[mNumSubMotions]
-    //		XSM_WaveletSubMotion[mNumSubMotions]
+    //		XSM_WaveletSkeletalSubMotion[mNumSubMotions]
     //		XSM_WaveletChunk[mNumChunks]
 };
 

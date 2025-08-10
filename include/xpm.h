@@ -28,6 +28,7 @@ struct XPM_Info
     uint32_t mMotionFPS; // the motion frame rate
     uint8_t mExporterHighVersion;
     uint8_t mExporterLowVersion;
+    uint8_t padding[2];
 
     // followed by:
     // string : source application (e.g. "3D Studio MAX 7", "Maya 6.5")
@@ -62,6 +63,7 @@ struct XPM_UnsignedShortKey
 {
     float mTime;     // the time in seconds
     uint16_t mValue; // the value
+    uint8_t padding[2];
 };
 
 struct XPM_SubMotions
