@@ -1,25 +1,32 @@
 cmake_minimum_required(VERSION 3.10.0)
 project(klaipeda VERSION 0.1.0 LANGUAGES C CXX)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# ---- FreeType & TinyXML2 ----
+add_subdirectory(external/freetype-2.14.1)
+add_subdirectory(external/tinyxml2-11.0.0)
+
 include_directories(
     include
-    external/glad33core/include
+    external/gladextcore33/include
     external/glfw-3.4.bin.WIN64/include
-    external/glm-1.0.1-light
+    external/glm-1.0.2
     external/imgui-docking
     external/imgui-docking/backends
     external/stb-master
     external/zlib-1.3.1
+    external/freetype-2.14.1/include
+    external/tinyxml2-11.0.0
 )
 
 link_directories(
     external/glfw-3.4.bin.WIN64/lib-mingw-w64
 )
 
+# ---- zlib ----
 set(ZLIB_SRC
     external/zlib-1.3.1/adler32.c
     external/zlib-1.3.1/compress.c
@@ -40,7 +47,7 @@ set(ZLIB_SRC
 add_library(zlib STATIC ${ZLIB_SRC})
 target_include_directories(zlib PUBLIC external/zlib-1.3.1)
 
-
+# ---- Executable ----
 add_executable(klaipeda 
     external/imgui-docking/imgui_demo.cpp
     external/imgui-docking/imgui_draw.cpp
@@ -49,7 +56,7 @@ add_executable(klaipeda
     external/imgui-docking/imgui.cpp
     external/imgui-docking/backends/imgui_impl_glfw.cpp 
     external/imgui-docking/backends/imgui_impl_opengl3.cpp 
-    external/glad33core/src/glad.c
+    external/gladextcore33/src/glad.c
     external/stb-master/stb_vorbis.c
     src/main.cpp
 )
@@ -58,4 +65,6 @@ target_link_libraries(klaipeda
     glfw3
     opengl32
     zlib
+    freetype
+    tinyxml2
 )
