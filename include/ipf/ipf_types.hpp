@@ -34,6 +34,7 @@ struct IPFFileTable
     std::string file_path;      // full path to container .ipf
 
     bool shouldSkipDecompression() const;
+    bool extractFileData(std::vector<uint8_t> &out, std::string &err);
 };
 
 struct IPFRoot

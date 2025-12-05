@@ -8,36 +8,6 @@
 #include <iostream>
 #include <sstream>
 
-// Helper: case-insensitive strcmp for portability
-int strcasecmp(const char *a, const char *b)
-{
-    while (*a && *b)
-    {
-        char ca = *a++;
-        char cb = *b++;
-        if (ca >= 'A' && ca <= 'Z')
-            ca += 'a' - 'A';
-        if (cb >= 'A' && cb <= 'Z')
-            cb += 'a' - 'A';
-        if (ca != cb)
-            return (unsigned char)ca - (unsigned char)cb;
-    }
-    return (unsigned char)*a - (unsigned char)*b;
-}
-
-bool IPFFileTable::shouldSkipDecompression() const
-{
-    static const std::vector<std::string> ignored = {".fsb", ".jpg", ".mp3"};
-    auto dot = directory_name.find_last_of('.');
-    if (dot == std::string::npos)
-        return false;
-    std::string ext = directory_name.substr(dot);
-    for (auto &e : ignored)
-        if (strcasecmp(e.c_str(), ext.c_str()) == 0)
-            return true;
-    return false;
-}
-
 bool readIpfRootFromPath(const std::string &path, IPFRoot &out)
 {
     BinaryReader br(path);
@@ -49,58 +19,45 @@ bool readIpfRootFromPath(const std::string &path, IPFRoot &out)
         return false;
     }
 
-    // Seek to end-24 to read header
-    if (!br.seek(HEADER_LOCATION, std::ios::end))
+    auto fail = [&out, &br](const std::string &msg)
     {
-        out.warnings.push_back("Seek to header failed");
+        out.warnings.push_back(msg);
         for (auto &e : br.errors())
             out.warnings.push_back(e.message);
         return false;
-    }
+    };
+
+    // Seek to end-24 to read header
+    if (!br.seek(HEADER_LOCATION, std::ios::end))
+        return fail("Seek to header failed");
 
     // Read header fields in little-endian
     if (!br.readLe<uint16_t>(out.header.file_count))
-    {
-        goto err;
-    }
+        return fail("Failed to read file_count");
     if (!br.readLe<uint32_t>(out.header.file_table_pointer))
-    {
-        goto err;
-    }
+        return fail("Failed to read file_table_pointer");
     if (!br.readLe<uint16_t>(out.header.padding))
-    {
-        goto err;
-    }
+        return fail("Failed to read padding");
     if (!br.readLe<uint32_t>(out.header.header_pointer))
-    {
-        goto err;
-    }
+        return fail("Failed to read header_pointer");
     if (!br.readLe<uint32_t>(out.header.magic))
-    {
-        goto err;
-    }
+        return fail("Failed to read magic");
     if (!br.readLe<uint32_t>(out.header.version_to_patch))
-    {
-        goto err;
-    }
+        return fail("Failed to read version_to_patch");
     if (!br.readLe<uint32_t>(out.header.new_version))
-    {
-        goto err;
-    }
+        return fail("Failed to read new_version");
 
     if (out.header.magic != MAGIC_NUMBER)
     {
         std::ostringstream oss;
-        oss << "Header magic mismatch: got 0x" << std::hex << out.header.magic << " expected 0x" << MAGIC_NUMBER;
+        oss << "Header magic mismatch: got 0x" << std::hex << out.header.magic
+            << " expected 0x" << MAGIC_NUMBER;
         out.warnings.push_back(oss.str());
     }
 
     // Seek to file table pointer
     if (!br.seek(static_cast<std::streamoff>(out.header.file_table_pointer), std::ios::beg))
-    {
-        out.warnings.push_back("Failed to seek to file_table_pointer");
-        goto err;
-    }
+        return fail("Failed to seek to file_table_pointer");
 
     out.file_table.clear();
     out.file_table.reserve(out.header.file_count);
@@ -108,50 +65,33 @@ bool readIpfRootFromPath(const std::string &path, IPFRoot &out)
     for (uint32_t i = 0; i < out.header.file_count; ++i)
     {
         IPFFileTable f;
-        if (!br.readLe<uint16_t>(f.directory_name_length))
-        {
-            goto err;
-        }
-        if (!br.readLe<uint32_t>(f.crc32))
-        {
-            goto err;
-        }
-        if (!br.readLe<uint32_t>(f.file_size_compressed))
-        {
-            goto err;
-        }
-        if (!br.readLe<uint32_t>(f.file_size_uncompressed))
-        {
-            goto err;
-        }
-        if (!br.readLe<uint32_t>(f.file_pointer))
-        {
-            goto err;
-        }
-        if (!br.readLe<uint16_t>(f.container_name_length))
-        {
-            goto err;
-        }
 
-        // read container_name
+        if (!br.readLe<uint16_t>(f.directory_name_length))
+            return fail("Failed to read directory_name_length");
+        if (!br.readLe<uint32_t>(f.crc32))
+            return fail("Failed to read crc32");
+        if (!br.readLe<uint32_t>(f.file_size_compressed))
+            return fail("Failed to read file_size_compressed");
+        if (!br.readLe<uint32_t>(f.file_size_uncompressed))
+            return fail("Failed to read file_size_uncompressed");
+        if (!br.readLe<uint32_t>(f.file_pointer))
+            return fail("Failed to read file_pointer");
+        if (!br.readLe<uint16_t>(f.container_name_length))
+            return fail("Failed to read container_name_length");
+
         std::vector<uint8_t> tmp;
+
         if (!br.readBytes(tmp, f.container_name_length))
-        {
-            goto err;
-        }
+            return fail("Failed to read container_name");
         f.container_name.assign(tmp.begin(), tmp.end());
 
-        // read directory_name
         if (!br.readBytes(tmp, f.directory_name_length))
-        {
-            goto err;
-        }
+            return fail("Failed to read directory_name");
         f.directory_name.assign(tmp.begin(), tmp.end());
 
         f.file_path = path;
 
-        // Prepend container stem like in Rust
-        // get stem from container_name (strip extension)
+        // Prepend container stem
         auto dotpos = f.container_name.find_last_of('.');
         std::string stem = (dotpos == std::string::npos) ? f.container_name : f.container_name.substr(0, dotpos);
         f.directory_name = stem + "/" + f.directory_name;
@@ -160,11 +100,6 @@ bool readIpfRootFromPath(const std::string &path, IPFRoot &out)
     }
 
     return true;
-
-err:
-    for (auto &e : br.errors())
-        out.warnings.push_back(e.message);
-    return false;
 }
 
 bool extractFileData(const IPFFileTable &ent, std::vector<uint8_t> &out, std::string &err)
