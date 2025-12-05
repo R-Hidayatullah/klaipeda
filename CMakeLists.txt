@@ -58,7 +58,15 @@ add_executable(klaipeda
     external/imgui-docking/backends/imgui_impl_opengl3.cpp 
     external/gladextcore33/src/glad.c
     external/stb-master/stb_vorbis.c
+    src/thread_pool.cpp
+    src/ipf/binary_reader.cpp
+    src/ipf/decompress.cpp
+    src/ipf/decrypt.cpp
+    src/ipf/ipf_reader.cpp
+    src/ipf/ipf_types.cpp
+    src/ipf/utils.cpp
     src/main.cpp
+
 )
 
 target_link_libraries(klaipeda

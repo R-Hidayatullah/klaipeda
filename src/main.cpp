@@ -1,57 +1,34 @@
+#include "ipf/ipf_reader.hpp"
+#include "ipf/utils.hpp"
 #include <iostream>
-#include <tinyxml2.h>
-using namespace tinyxml2;
-
-#include <ft2build.h>
-#include FT_FREETYPE_H
-
-void testFreetype()
-{
-    FT_Library ft;
-    if (FT_Init_FreeType(&ft))
-    {
-        printf("Freetype init FAILED!\n");
-        return;
-    }
-    printf("Freetype init OK!\n");
-
-    // Try loading any .ttf
-    if (FT_New_Face(ft, "C:/Windows/Fonts/arial.ttf", 0, nullptr))
-    {
-        printf("Load font FAILED\n");
-    }
-    else
-    {
-        printf("Font load OK\n");
-    }
-
-    FT_Done_FreeType(ft);
-}
-
-void testTinyXML2()
-{
-    const char *xml =
-        "<root>"
-        "  <child name='abc'>123</child>"
-        "</root>";
-
-    XMLDocument doc;
-    if (doc.Parse(xml) == XML_SUCCESS)
-    {
-        printf("TinyXML2 OK\n");
-        auto *child = doc.FirstChildElement("root")->FirstChildElement("child");
-        printf("child text = %s\n", child->GetText());
-    }
-    else
-    {
-        printf("TinyXML2 FAILED!\n");
-    }
-}
+#include <vector>
+#include <string>
+#include <filesystem>
+#include <thread>
 
 int main()
 {
-    std::cout << "Hello World!\n";
-    testFreetype();
-    testTinyXML2();
+
+    std::string path = "C:\\Users\\Ridwan Hidayatullah\\Documents\\TreeOfSaviorCN\\data\\xml_tree.ipf";
+    IPFRoot root;
+    if (!readIpfRootFromPath(path, root))
+    {
+        for (auto &w : root.warnings)
+            logWarn(w);
+        logError("Failed reading IPF root");
+        return 1;
+    }
+    logInfo("Header: file_count=" + std::to_string(root.header.file_count));
+    for (auto &w : root.warnings)
+        logWarn(w);
+    logInfo("Listing first 20 file table entries:");
+    for (size_t i = 0; i < root.file_table.size() && i < 20; ++i)
+    {
+        auto &e = root.file_table[i];
+        std::cout << i << ": " << e.directory_name
+                  << " compressed=" << e.file_size_compressed
+                  << " uncompressed=" << e.file_size_uncompressed
+                  << " pointer=" << e.file_pointer << "\n";
+    }
     return 0;
 }
